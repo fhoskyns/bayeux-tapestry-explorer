@@ -1,0 +1,64 @@
+# The Bayeux Tapestry, Thread by Thread
+
+An English-first, non-commercial interactive exploration of the complete surviving Bayeux Tapestry.
+
+## Status
+
+This repository is an **editorial and technical preview**, not a production publication. It contains all 58 modern museum scene divisions and 116 draft notes, but every transcription, translation, citation locator, scene boundary, and hotspot position still requires specialist review. The release check is designed to fail until that evidence exists.
+
+## Experience
+
+- A true-proportion overview of the complete surviving strip.
+- A 58-scene guided tour with previous/next controls and shareable URLs.
+- Pan, wheel/pinch zoom, explicit image controls, and resumable free exploration.
+- A complete-strip navigator with hover magnification, click-to-jump, viewport indication, and an accessible scene selector.
+- Keyboard-accessible annotation markers, a desktop evidence panel, a mobile bottom panel, Latin tituli, draft project translations, and direct source links.
+
+## Local development
+
+Requirements: Node.js 22.13 or newer and pnpm.
+
+```sh
+pnpm install --frozen-lockfile
+cp .env.example .env.local
+pnpm dev
+```
+
+Without `VITE_TAPESTRY_TILE_BASE_URL`, the app deliberately uses resized Wikimedia Commons preview imagery. No credential is ever exposed to the browser.
+
+## Checks
+
+```sh
+pnpm check
+pnpm release:check
+```
+
+`pnpm check` validates the draft data contract, types, lint, interactions, and the complete static export. Once the manifest is marked `publication-ready`, its content validator automatically enforces the full release gate in CI. `pnpm release:check` invokes that gate explicitly: it requires global editorial approval, a documented image-publication basis, audited content with evidence-bearing review records, and a passing full-pixel Deep Zoom verification report.
+
+The tile generator and Worker have their own tested package:
+
+```sh
+cd infrastructure/deepzoom
+pnpm install --frozen-lockfile
+pnpm test
+```
+
+See [PROVENANCE.md](./PROVENANCE.md), [DEPLOYMENT.md](./DEPLOYMENT.md), and [infrastructure/deepzoom/README.md](./infrastructure/deepzoom/README.md) before handling imagery or Cloudflare resources.
+
+## Deployment shape
+
+- Static React/Vinext export on Vercel.
+- Lossless versioned DZI derivatives in a public-derivative-only Cloudflare R2 bucket.
+- A read-only Cloudflare Worker that accepts only canonical `GET` and `HEAD` paths under `/v1/`.
+- A physically separate private archive bucket for the untouched master, with no Worker binding.
+- No database, authentication, analytics, advertising, cookies, or application API.
+
+## Corrections and rights concerns
+
+Open a GitHub issue with the scene number, source, and requested correction. Do not attach copyrighted source imagery or private personal information. A private operator contact will be added before production publication.
+
+## Licences
+
+- Application code: [MIT](./LICENSE).
+- Original editorial content: [CC BY-NC-SA 4.0](./CONTENT-LICENSE.md).
+- Tapestry imagery and all third-party material: excluded from both licences.

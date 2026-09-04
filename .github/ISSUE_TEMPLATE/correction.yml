@@ -1,0 +1,27 @@
+name: Editorial correction
+description: Report a source-backed correction to a scene, translation, note, or citation.
+title: "Correction: "
+labels: [editorial]
+body:
+  - type: input
+    id: scene
+    attributes:
+      label: Scene
+      description: Give the two-digit scene number or say that this is site-wide.
+      placeholder: "07"
+    validations:
+      required: true
+  - type: textarea
+    id: correction
+    attributes:
+      label: Requested correction
+      description: Explain precisely what should change and why.
+    validations:
+      required: true
+  - type: textarea
+    id: sources
+    attributes:
+      label: Supporting sources and exact locators
+      description: Link stable sources and give page, figure, paragraph, catalogue, or scene locators. Do not upload copyrighted scans.
+    validations:
+      required: true

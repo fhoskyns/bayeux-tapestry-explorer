@@ -1,0 +1,26 @@
+name: Rights or takedown concern
+description: Identify material whose display or attribution may require review.
+title: "Rights review: "
+labels: [rights]
+body:
+  - type: textarea
+    id: material
+    attributes:
+      label: Material and location
+      description: Give the relevant page, scene, image, or repository path.
+    validations:
+      required: true
+  - type: textarea
+    id: concern
+    attributes:
+      label: Concern and requested action
+      description: Explain the concern without including private personal data or confidential documents.
+    validations:
+      required: true
+  - type: textarea
+    id: basis
+    attributes:
+      label: Supporting information
+      description: Provide public links or a concise explanation of your relationship to the material.
+    validations:
+      required: true

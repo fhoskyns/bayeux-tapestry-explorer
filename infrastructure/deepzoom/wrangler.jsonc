@@ -1,0 +1,15 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "bayeux-tiles",
+  "main": "worker/src/index.js",
+  "compatibility_date": "2026-09-04",
+  "workers_dev": true,
+  "preview_urls": false,
+  "r2_buckets": [
+    {
+      "binding": "TAPESTRY_DERIVATIVES",
+      "bucket_name": "bayeux-tapestry-derivatives",
+      "preview_bucket_name": "bayeux-tapestry-derivatives-preview"
+    }
+  ]
+}

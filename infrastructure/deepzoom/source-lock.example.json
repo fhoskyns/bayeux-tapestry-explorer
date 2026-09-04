@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "assetId": "bayeux-tapestry",
+  "source": {
+    "sha256": "REPLACE_WITH_64_LOWERCASE_HEX_CHARACTERS",
+    "bytes": 0,
+    "width": 0,
+    "height": 0,
+    "channels": 3,
+    "depth": "uchar",
+    "space": "srgb",
+    "orientation": 1
+  },
+  "pyramid": {
+    "version": "v1",
+    "tileSize": 1024,
+    "overlap": 1,
+    "format": "webp",
+    "lossless": true
+  },
+  "toolchain": {
+    "sharp": "0.35.4",
+    "libvips": "8.18.6"
+  }
+}
