@@ -1,6 +1,6 @@
+/* eslint-disable nextjs/no-html-link-for-pages -- Static export has no RSC navigation endpoint. */
 import type { Metadata } from 'next';
 import { ArrowLeft, ExternalLink, FileCheck2, GitBranch, Scale } from 'lucide-react';
-import Link from 'next/link';
 
 import { tapestryManifest } from '@/data/tapestry-manifest';
 
@@ -21,9 +21,9 @@ export default function SourcesPage() {
   return (
     <main className="sources-page">
       <header className="site-header">
-        <Link className="exhibition-label" href="/">The Bayeux Tapestry, Thread by Thread</Link>
+        <a className="exhibition-label" href="/">The Bayeux Tapestry, Thread by Thread</a>
         <nav aria-label="Project navigation" className="site-nav">
-          <Link className="nav-link sources-back" href="/"><ArrowLeft aria-hidden="true" /> Back to the tapestry</Link>
+          <a className="nav-link sources-back" href="/"><ArrowLeft aria-hidden="true" /> Back to the tapestry</a>
         </nav>
       </header>
 

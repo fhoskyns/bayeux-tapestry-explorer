@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { composeDziUrl, TapestryExplorer } from '@/components/tapestry-explorer';
 import { tapestryManifest } from '@/data/tapestry-manifest';
+import SourcesPage from '@/app/sources/page';
 
 vi.mock('@/components/tapestry-viewer', () => ({
   TapestryViewer: ({ initialViewport, mode, onExplore, onViewportChange, reduceMotion, scene }: {
@@ -92,6 +93,23 @@ describe('guided tour interactions', () => {
     expect(source).toBeDefined();
     const notePanel = within(screen.getByRole('dialog', { name: annotation.title }));
     expect(notePanel.getByRole('link', { name: new RegExp(source!.author) })).toHaveAttribute('href', source!.stableUrl);
+  });
+
+  it('uses static page links and returns to overview from the title', async () => {
+    window.history.replaceState(null, '', '/?scene=07');
+    const { unmount } = render(<TapestryExplorer manifest={tapestryManifest} />);
+    await waitFor(() => expect(screen.getByTestId('mock-viewer')).toHaveAttribute('data-mode', 'guided'));
+    expect(screen.getByRole('link', { name: /sources & rights/i })).toHaveAttribute('href', '/sources');
+    const titleLink = screen.getByRole('link', { name: 'The Bayeux Tapestry, Thread by Thread' });
+    expect(titleLink).toHaveAttribute('href', '/');
+    fireEvent.click(titleLink);
+    expect(screen.getByRole('button', { name: /start the tour/i })).toBeInTheDocument();
+    expect(window.location.search).toBe('');
+    unmount();
+
+    render(<SourcesPage />);
+    expect(screen.getByRole('link', { name: /back to the tapestry/i })).toHaveAttribute('href', '/');
+    expect(screen.getByRole('link', { name: 'The Bayeux Tapestry, Thread by Thread' })).toHaveAttribute('href', '/');
   });
 
   it('can traverse all 58 scenes and exposes the final return action', async () => {

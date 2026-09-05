@@ -1,5 +1,7 @@
 'use client';
 
+/* eslint-disable nextjs/no-html-link-for-pages -- Static export has no RSC navigation endpoint. */
+
 import {
   ArrowLeft,
   ArrowRight,
@@ -15,7 +17,6 @@ import {
   X,
 } from 'lucide-react';
 import Image from 'next/image';
-import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -371,12 +372,12 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
   return (
     <main className="min-h-screen bg-white text-[var(--ink)]">
       <header className="site-header">
-        <Link className="exhibition-label" href="/" onClick={(event) => { event.preventDefault(); goOverview(); }}>
+        <a className="exhibition-label" href="/" onClick={(event) => { event.preventDefault(); goOverview(); }}>
           The Bayeux Tapestry, Thread by Thread
-        </Link>
+        </a>
         <nav aria-label="About this project" className="site-nav">
           <a className="nav-link" href="#about">About</a>
-          <Link className="nav-link" href="/sources">Sources &amp; rights</Link>
+          <a className="nav-link" href="/sources">Sources &amp; rights</a>
         </nav>
       </header>
 

@@ -12,7 +12,6 @@ export default defineConfig({
     alias: {
       '@': root,
       'next/image': path.join(root, 'test/stubs/next-image.tsx'),
-      'next/link': path.join(root, 'test/stubs/next-link.tsx'),
     },
   },
   test: {
