@@ -54,6 +54,8 @@ type MotionAwareViewport = OpenSeadragonType.Viewport & {
   zoomSpring: OpenSeadragonType.Spring;
 };
 
+type PanAwareViewer = OpenSeadragonType.Viewer & { panVertical: boolean };
+
 function clamp(value: number, minimum = 0, maximum = 1) {
   return Math.max(minimum, Math.min(maximum, value));
 }
@@ -112,6 +114,20 @@ function createMarker(
   marker.appendChild(dot);
   marker.appendChild(preview);
 
+  const positionPreview = () => {
+    const surface = marker.closest('[data-viewer-canvas="true"]');
+    if (!surface) return;
+    const available = surface.getBoundingClientRect();
+    const anchor = marker.getBoundingClientRect();
+    const halfWidth = preview.offsetWidth / 2;
+    const centerX = anchor.left + anchor.width / 2;
+    marker.classList.toggle('annotation-marker--below', anchor.top - available.top < preview.offsetHeight + 16);
+    marker.classList.toggle('annotation-marker--edge-left', centerX - available.left < halfWidth + 12);
+    marker.classList.toggle('annotation-marker--edge-right', available.right - centerX < halfWidth + 12);
+  };
+  marker.addEventListener('mouseenter', positionPreview);
+  marker.addEventListener('focus', positionPreview);
+
   for (const eventName of ['pointerdown', 'pointerup', 'dblclick', 'touchstart']) {
     marker.addEventListener(eventName, stopViewerGesture);
   }
@@ -165,6 +181,13 @@ export function TapestryViewer({
   onReady,
 }: TapestryViewerProps) {
   const elementRef = useRef<HTMLDivElement>(null);
+  const transitionRef = useRef<HTMLCanvasElement>(null);
+  const transitionStateRef = useRef<'empty' | 'holding' | 'leaving'>('empty');
+  const pendingItemRef = useRef<OpenSeadragonType.TiledImage | null>(null);
+  const waitingForDrawRef = useRef(false);
+  const transitionTimerRef = useRef<number | undefined>(undefined);
+  const previousSceneNumberRef = useRef(0);
+  const [transitionState, setTransitionState] = useState<'empty' | 'holding' | 'leaving'>('empty');
   const viewerRef = useRef<OpenSeadragonType.Viewer | null>(null);
   const runtimeRef = useRef<typeof OpenSeadragonType | null>(null);
   const sourceKeyRef = useRef('');
@@ -234,10 +257,11 @@ export function TapestryViewer({
         animationTime: contextRef.current.reduceMotion ? 0 : 0.8,
         blendTime: contextRef.current.reduceMotion ? 0 : 0.18,
         imageSmoothingEnabled: true,
-        minZoomImageRatio: 0.8,
+        minZoomImageRatio: 1,
         maxZoomPixelRatio: 3,
-        visibilityRatio: 0.4,
-        constrainDuringPan: false,
+        visibilityRatio: 1,
+        constrainDuringPan: true,
+        panVertical: false,
         tileRetryMax: 2,
         tileRetryDelay: 450,
         timeout: 18000,
@@ -259,13 +283,13 @@ export function TapestryViewer({
       });
 
       const reportViewport = () => {
-        if (!viewer) return;
+        if (!viewer || waitingForDrawRef.current) return;
         const viewport = viewportForViewer(viewer, contextRef.current);
         if (viewport) contextRef.current.onViewportChange(viewport);
       };
 
       const reportExplore = () => {
-        if (!viewer) return;
+        if (!viewer || waitingForDrawRef.current) return;
         const viewport = viewportForViewer(viewer, contextRef.current);
         if (!viewport) return;
         contextRef.current.onExplore(clamp(viewport.x + viewport.width / 2));
@@ -276,6 +300,10 @@ export function TapestryViewer({
       viewer.addHandler('canvas-pinch', reportExplore);
       viewer.addHandler('canvas-key', (event) => {
         const code = event.originalEvent?.code;
+        if (viewer && !(viewer as PanAwareViewer).panVertical && code && ['ArrowUp', 'ArrowDown', 'KeyW', 'KeyS'].includes(code)) {
+          event.preventDefaultAction = true;
+          return;
+        }
         if (
           code && [
             'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
@@ -286,6 +314,39 @@ export function TapestryViewer({
         }
       });
       viewer.addHandler('animation-finish', reportViewport);
+      viewer.addHandler('viewport-change', () => {
+        if (!viewer?.viewport) return;
+        const item = viewer.world.getItemAt(0);
+        if (!item) return;
+        const imageBounds = item.getBounds(true);
+        const fitsHeight = viewer.viewport.getBounds(true).height >= imageBounds.height - 0.0000001;
+        (viewer as PanAwareViewer).panVertical = !fitsHeight;
+        if (fitsHeight) {
+          const spring = (viewer.viewport as MotionAwareViewport).centerSpringY;
+          const centerY = imageBounds.y + imageBounds.height / 2;
+          if (Math.abs(spring.current.value - centerY) > 0.0000001 || Math.abs(spring.target.value - centerY) > 0.0000001) {
+            // Reset Y alone: horizontal pan and momentum remain untouched.
+            spring.resetTo(centerY);
+          }
+        }
+      });
+      viewer.addHandler('update-viewport', () => {
+        const item = viewer?.world.getItemAt(0);
+        if (!waitingForDrawRef.current || !item || item !== pendingItemRef.current || !item.getFullyLoaded()) return;
+        waitingForDrawRef.current = false;
+        setLoading(false);
+        renderOverlaysRef.current();
+        contextRef.current.onReady?.();
+        reportViewport();
+        if (transitionStateRef.current !== 'empty') {
+          transitionStateRef.current = 'leaving';
+          setTransitionState('leaving');
+          transitionTimerRef.current = window.setTimeout(() => {
+            transitionStateRef.current = 'empty';
+            setTransitionState('empty');
+          }, contextRef.current.reduceMotion ? 0 : 550);
+        }
+      });
       viewer.addHandler('canvas-click', (event) => {
         const target = event.originalEvent?.target;
         if (target instanceof Element && target.closest('.annotation-marker')) {
@@ -301,6 +362,7 @@ export function TapestryViewer({
         if (!event.maxReached) return;
         failedTiles.add(event.tile.cacheKey || event.tile.getUrl());
         setError(true);
+        setLoading(false);
       });
       viewer.addHandler('tile-loaded', (event) => {
         failedTiles.delete(event.tile.cacheKey || event.tile.getUrl());
@@ -315,6 +377,7 @@ export function TapestryViewer({
       renderOverlaysRef.current = () => undefined;
       fitRef.current = () => undefined;
       failedTiles.clear();
+      window.clearTimeout(transitionTimerRef.current);
       viewer?.destroy();
       viewerRef.current = null;
       runtimeRef.current = null;
@@ -384,6 +447,7 @@ export function TapestryViewer({
       const currentContext = contextRef.current;
       const item = viewer.world.getItemAt(0);
       viewer.clearOverlays();
+      if (waitingForDrawRef.current) return;
       if (!item || !currentContext.scene || currentContext.mode === 'overview') return;
 
       const dimensions = item.getContentSize();
@@ -450,20 +514,36 @@ export function TapestryViewer({
         fitScene();
       }
       renderOverlays();
-      setLoading(false);
       setError(false);
-      currentContext.onReady?.();
-      const viewport = viewportForViewer(viewer, currentContext);
-      if (viewport) currentContext.onViewportChange(viewport);
+      pendingItemRef.current = viewer.world.getItemAt(0);
     };
 
-    if (sourceKeyRef.current === sourceKey && viewer.isOpen()) {
+    if (sourceKeyRef.current === sourceKey && viewer.isOpen() && !waitingForDrawRef.current) {
       if (mode !== 'free') fitScene();
       renderOverlays();
       return;
     }
 
     sourceKeyRef.current = sourceKey;
+    window.clearTimeout(transitionTimerRef.current);
+    // Preserve the last drawn frame, including the user's zoom. Repeated fast
+    // navigation must not replace it with a half-loaded or empty canvas.
+    const previousCanvas = viewer.drawer?.canvas;
+    const snapshot = transitionRef.current;
+    if (!waitingForDrawRef.current && viewer.isOpen() && previousCanvas && snapshot) {
+      snapshot.width = previousCanvas.width;
+      snapshot.height = previousCanvas.height;
+      snapshot.getContext('2d')?.drawImage(previousCanvas, 0, 0);
+      transitionStateRef.current = 'holding';
+      setTransitionState('holding');
+    } else if (transitionStateRef.current === 'leaving') {
+      transitionStateRef.current = 'holding';
+      setTransitionState('holding');
+    }
+    if (snapshot) snapshot.style.setProperty('--exit-offset', (scene?.number ?? 0) >= previousSceneNumberRef.current ? '-20px' : '20px');
+    previousSceneNumberRef.current = scene?.number ?? 0;
+    waitingForDrawRef.current = true;
+    pendingItemRef.current = null;
     failedTilesRef.current.clear();
     setLoading(true);
     setError(false);
@@ -505,7 +585,7 @@ export function TapestryViewer({
   }, []);
 
   return (
-    <div className="tapestry-canvas-wrap">
+    <div className="tapestry-canvas-wrap" aria-busy={loading}>
       <section
         aria-label={
           scene && mode !== 'overview'
@@ -516,6 +596,7 @@ export function TapestryViewer({
         data-viewer-canvas="true"
         ref={elementRef}
       />
+      <canvas aria-hidden="true" className={`viewer-transition ${transitionState === 'leaving' ? 'is-leaving' : ''}`} hidden={transitionState === 'empty'} ref={transitionRef} />
       {mode !== 'overview' ? (
         <fieldset className="image-controls">
           <legend className="sr-only">Image viewing controls</legend>
@@ -526,7 +607,7 @@ export function TapestryViewer({
       ) : null}
       {loading ? (
         <div aria-live="polite" className="viewer-message">
-          <span className="viewer-spinner" /> Preparing the threads…
+          <span className="viewer-spinner" /> Loading scene…
         </div>
       ) : null}
       {error ? (

@@ -131,11 +131,11 @@
 }
 
 :root {
-  --ink: #191713;
-  --quiet: #6d685f;
-  --paper: #fbfaf7;
-  --line: #e5e0d6;
-  --line-strong: #b8afa1;
+  --ink: #181818;
+  --quiet: #686868;
+  --paper: #ffffff;
+  --line: #e8e8e8;
+  --line-strong: #b8b8b8;
   --oxblood: #7a2e2a;
   --ochre: #aa7b35;
   --olive: #66633f;

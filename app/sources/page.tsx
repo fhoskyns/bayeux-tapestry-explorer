@@ -72,6 +72,17 @@ export default function SourcesPage() {
         <p>{publicRightsNotice}</p>
       </section>
 
+      <section className="credit-block" id="intro-credits">
+        <h2>Opening sequence</h2>
+        <p>
+          The geographic opening refers to the <a href="https://www.britishmuseum.org/exhibitions/bayeux-tapestry">British Museum’s September 2026–July 2027 loan exhibition</a>, not the tapestry’s permanent home in Bayeux. The transition is illustrative; it does not reproduce the exhibition interior. This project is not affiliated with either museum.
+        </p>
+        <p>
+          Map: <a href="https://www.naturalearthdata.com/about/terms-of-use/">Natural Earth, public domain</a>, 1:110 million land data, rendered in an equirectangular projection. Photograph: <a href="https://commons.wikimedia.org/wiki/File:British_Museum_Facade.JPG">British Museum Facade, Ludi Ling (2008)</a>, <a href="https://creativecommons.org/licenses/by-sa/3.0/">CC BY-SA 3.0</a>, resized by Wikimedia Commons and cropped in the display. The photograph and its display adaptation remain under CC BY-SA 3.0, outside the code and editorial licences.
+        </p>
+        <p>The introduction uses one local device preference to remember that it has been seen. No cookies, tracking or visitor data are sent.</p>
+      </section>
+
       <section className="editorial-policy">
         <div>
           <p className="eyebrow">Editorial method</p>

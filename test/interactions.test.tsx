@@ -1,9 +1,10 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { composeDziUrl, TapestryExplorer } from '@/components/tapestry-explorer';
 import { tapestryManifest } from '@/data/tapestry-manifest';
 import SourcesPage from '@/app/sources/page';
+import { ARRIVAL_DURATION, ARRIVAL_PREFERENCE, TapestryArrival } from '@/components/tapestry-arrival';
 
 vi.mock('@/components/tapestry-viewer', () => ({
   TapestryViewer: ({ initialViewport, mode, onExplore, onViewportChange, reduceMotion, scene }: {
@@ -52,6 +53,7 @@ function mockMotion(matches = false) {
 describe('guided tour interactions', () => {
   beforeEach(() => {
     window.history.replaceState(null, '', '/');
+    window.localStorage.setItem(ARRIVAL_PREFERENCE, '1');
     mockMotion();
   });
 
@@ -64,6 +66,50 @@ describe('guided tour interactions', () => {
     expect(composeDziUrl('https://bayeux-tiles.example.workers.dev', path)).toBe(
       'https://bayeux-tiles.example.workers.dev/v1/bayeux-tapestry/bayeux-tapestry.dzi',
     );
+  });
+
+  it('plays the first-visit opening, lets visitors skip, and never replays from Home', async () => {
+    window.localStorage.removeItem(ARRIVAL_PREFERENCE);
+    render(<TapestryExplorer manifest={tapestryManifest} />);
+    expect(screen.getByRole('dialog', { name: /a journey/i })).toBeInTheDocument();
+    expect(document.querySelector('main')).toHaveAttribute('inert');
+    fireEvent.click(screen.getByRole('button', { name: /skip introduction/i }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(document.querySelector('main')).not.toHaveAttribute('inert');
+    expect(window.location.search).toBe('?scene=01');
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'King Edward and Harold' })).toHaveFocus());
+    fireEvent.click(screen.getByRole('button', { name: 'Overview — complete tapestry' }));
+    expect(screen.getByRole('button', { name: /start the tour/i })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(window.localStorage.getItem(ARRIVAL_PREFERENCE)).toBe('1');
+  });
+
+  it('bypasses first-visit animation for reduced motion and direct scene links', () => {
+    window.localStorage.removeItem(ARRIVAL_PREFERENCE);
+    mockMotion(true);
+    const view = render(<TapestryExplorer manifest={tapestryManifest} />);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(window.location.search).toBe('?scene=01');
+    view.unmount();
+    window.localStorage.removeItem(ARRIVAL_PREFERENCE);
+    mockMotion();
+    window.history.replaceState(null, '', '/?scene=07');
+    render(<TapestryExplorer manifest={tapestryManifest} />);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(window.location.search).toBe('?scene=07');
+  });
+
+  it('automatically completes the opening in 2.6 seconds', async () => {
+    vi.useFakeTimers();
+    const complete = vi.fn();
+    try {
+      render(<TapestryArrival onComplete={complete} />);
+      await act(async () => { await Promise.resolve(); });
+      await act(async () => { vi.advanceTimersByTime(ARRIVAL_DURATION - 1); });
+      expect(complete).not.toHaveBeenCalled();
+      await act(async () => { vi.advanceTimersByTime(1); });
+      expect(complete).toHaveBeenCalledOnce();
+    } finally { vi.useRealTimers(); }
   });
 
   it('enters Scene 1 from the overview and returns with Previous', async () => {
@@ -84,6 +130,7 @@ describe('guided tour interactions', () => {
     render(<TapestryExplorer manifest={tapestryManifest} />);
 
     // The viewer mock provides no image or overlays; the reading path must stand alone.
+    fireEvent.click(screen.getByText('Read this scene'));
     expect(await screen.findByText(scene.latinInscription)).toBeInTheDocument();
     expect(screen.getByText(scene.englishTranslation)).toBeInTheDocument();
     expect(screen.getByTestId('mock-viewer').querySelector('canvas, img')).toBeNull();
@@ -191,6 +238,7 @@ describe('guided tour interactions', () => {
     mockMotion(true);
     render(<TapestryExplorer manifest={tapestryManifest} />);
     fireEvent.click(screen.getByRole('button', { name: /start the tour/i }));
+    fireEvent.click(screen.getByText('Read this scene'));
     const noteButton = await screen.findByRole('button', { name: /01 the enthroned king/i });
     fireEvent.click(noteButton);
     expect(screen.getByText(tapestryManifest.scenes[0].annotations[0].commentary)).toBeInTheDocument();

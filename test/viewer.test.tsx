@@ -9,6 +9,7 @@ const osd = vi.hoisted(() => {
     maxReached?: boolean;
     originalEvent?: { code: string };
     tile?: { cacheKey: string; getUrl: () => string };
+    preventDefaultAction?: boolean;
   };
   type Handler = { callback: (event: EventData) => void; once: boolean };
   class Point {
@@ -18,12 +19,18 @@ const osd = vi.hoisted(() => {
     handlers = new Map<string, Handler[]>();
     overlays: HTMLElement[] = [];
     opened = false;
+    panVertical = false;
+    drawer: { canvas: HTMLCanvasElement } | undefined;
+    fullyLoaded = true;
+    viewBounds = { x: 0, y: 0, width: 1, height: 1 };
     imageBounds = { x: 0, y: 0, width: 3840, height: 2160 };
     item = {
       getContentSize: () => ({ x: 3840, y: 2160 }),
       imageToViewportCoordinates: (x: number, y: number) => ({ x, y }),
       imageToViewportRectangle: (x: number, y: number, width: number, height: number) => ({ x, y, width, height }),
       viewportToImageRectangle: () => this.imageBounds,
+      getBounds: () => ({ x: 0, y: 0, width: 1, height: 0.5 }),
+      getFullyLoaded: () => this.fullyLoaded,
     };
     world = { getItemAt: () => this.opened ? this.item : undefined };
     zoomResult = { applyConstraints: vi.fn() };
@@ -32,9 +39,9 @@ const osd = vi.hoisted(() => {
       fitBounds: vi.fn(),
       resize: vi.fn(),
       zoomBy: vi.fn(() => this.zoomResult),
-      getBounds: () => ({ x: 0, y: 0, width: 1, height: 1 }),
+      getBounds: () => this.viewBounds,
       centerSpringX: { animationTime: 0.8 },
-      centerSpringY: { animationTime: 0.8 },
+      centerSpringY: { animationTime: 0.8, current: { value: 0.5 }, target: { value: 0.6 }, resetTo: vi.fn() },
       zoomSpring: { animationTime: 0.8 },
       degreesSpring: { animationTime: 0.8 },
     };
@@ -114,10 +121,10 @@ describe('real tapestry viewer', () => {
     const view = render(<TapestryViewer {...props} />);
     const viewer = await initializedViewer();
     expect(viewer.open).toHaveBeenCalledWith({ tileSource: { type: 'image', url: scene.imageUrl } });
-    expect(screen.getByText(/preparing the threads/i)).toBeInTheDocument();
+    expect(screen.getByText(/loading scene/i)).toBeInTheDocument();
 
-    act(() => viewer.emit('open'));
-    expect(screen.queryByText(/preparing the threads/i)).not.toBeInTheDocument();
+    act(() => { viewer.emit('open'); viewer.emit('update-viewport'); });
+    expect(screen.queryByText(/loading scene/i)).not.toBeInTheDocument();
     expect(props.onReady).toHaveBeenCalledOnce();
     expect(props.onViewportChange).toHaveBeenCalledOnce();
     expect(viewer.viewport.goHome).toHaveBeenCalled();
@@ -130,7 +137,7 @@ describe('real tapestry viewer', () => {
     const props = viewerProps();
     const view = render(<TapestryViewer {...props} />);
     const viewer = await initializedViewer();
-    act(() => viewer.emit('open'));
+    act(() => { viewer.emit('open'); viewer.emit('update-viewport'); });
 
     view.rerender(<TapestryViewer {...props} reduceMotion />);
     expect(osd.instances).toHaveLength(1);
@@ -140,11 +147,61 @@ describe('real tapestry viewer', () => {
     expect(screen.getByRole('button', { name: /note 1, observation: the enthroned king/i })).toBeInTheDocument();
   });
 
+  it('waits for loaded pixels to be drawn before declaring the image ready', async () => {
+    const props = viewerProps();
+    render(<TapestryViewer {...props} />);
+    const viewer = await initializedViewer();
+    viewer.fullyLoaded = false;
+    act(() => { viewer.emit('open'); viewer.emit('update-viewport'); });
+    expect(props.onReady).not.toHaveBeenCalled();
+    expect(screen.getByText(/loading scene/i)).toBeInTheDocument();
+    viewer.fullyLoaded = true;
+    act(() => viewer.emit('update-viewport'));
+    expect(props.onReady).toHaveBeenCalledOnce();
+    expect(screen.queryByText(/loading scene/i)).not.toBeInTheDocument();
+  });
+
+  it('retains the last image during rapid navigation and fades only after the latest frame is ready', async () => {
+    const drawImage = vi.fn();
+    const canvasContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ drawImage } as unknown as CanvasRenderingContext2D);
+    try {
+      const props = viewerProps();
+      const view = render(<TapestryViewer {...props} />);
+      const viewer = await initializedViewer();
+      viewer.drawer = { canvas: document.createElement('canvas') };
+      act(() => { viewer.emit('open'); viewer.emit('update-viewport'); });
+      view.rerender(<TapestryViewer {...props} scene={tapestryManifest.scenes[1]} />);
+      expect(drawImage).toHaveBeenCalledOnce();
+      expect(document.querySelector('.viewer-transition')).not.toHaveAttribute('hidden');
+      view.rerender(<TapestryViewer {...props} scene={tapestryManifest.scenes[2]} />);
+      expect(drawImage).toHaveBeenCalledOnce();
+      expect(document.querySelector('.viewer-transition')).not.toHaveClass('is-leaving');
+      act(() => viewer.emit('open'));
+      expect(document.querySelector('.viewer-transition')).not.toHaveClass('is-leaving');
+      act(() => viewer.emit('update-viewport'));
+      expect(document.querySelector('.viewer-transition')).toHaveClass('is-leaving');
+    } finally { canvasContext.mockRestore(); }
+  });
+
+  it('locks vertical movement at full height but allows detail panning without disturbing horizontal springs', async () => {
+    render(<TapestryViewer {...viewerProps()} />);
+    const viewer = await initializedViewer();
+    act(() => { viewer.emit('open'); viewer.emit('update-viewport'); viewer.emit('viewport-change'); });
+    expect(viewer.panVertical).toBe(false);
+    expect(viewer.viewport.centerSpringY.resetTo).toHaveBeenCalledWith(0.25);
+    const verticalKey = { originalEvent: { code: 'ArrowDown' }, preventDefaultAction: false };
+    act(() => viewer.emit('canvas-key', verticalKey));
+    expect(verticalKey.preventDefaultAction).toBe(true);
+    viewer.viewBounds = { x: 0, y: 0, width: 0.2, height: 0.2 };
+    act(() => viewer.emit('viewport-change'));
+    expect(viewer.panVertical).toBe(true);
+  });
+
   it('renders native focusable overlay buttons and activates the selected note without bubbling to the canvas', async () => {
     const props = viewerProps();
     render(<TapestryViewer {...props} />);
     const viewer = await initializedViewer();
-    act(() => viewer.emit('open'));
+    act(() => { viewer.emit('open'); viewer.emit('update-viewport'); });
     const marker = screen.getByRole('button', { name: /note 1, observation: the enthroned king/i });
     const canvasClick = vi.fn();
     viewer.element.addEventListener('click', canvasClick);
@@ -168,10 +225,10 @@ describe('real tapestry viewer', () => {
 
     expect(screen.getByText(/some image data could not be loaded/i)).toBeInTheDocument();
     expect(screen.getByText(/transcript and notes remain available/i)).toBeInTheDocument();
-    expect(screen.queryByText(/preparing the threads/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/loading scene/i)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /retry image/i }));
     await waitFor(() => expect(viewer.open).toHaveBeenCalledTimes(2));
-    act(() => viewer.emit('open'));
+    act(() => { viewer.emit('open'); viewer.emit('update-viewport'); });
 
     expect(screen.queryByText(/some image data could not be loaded/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /retry image/i })).not.toBeInTheDocument();
@@ -182,7 +239,7 @@ describe('real tapestry viewer', () => {
     const props = viewerProps();
     render(<TapestryViewer {...props} />);
     const viewer = await initializedViewer();
-    act(() => viewer.emit('open'));
+    act(() => { viewer.emit('open'); viewer.emit('update-viewport'); });
 
     act(() => viewer.emit('tile-load-failed', { tile: failedTile, maxReached: false }));
     expect(screen.queryByRole('button', { name: /retry image/i })).not.toBeInTheDocument();
@@ -203,7 +260,7 @@ describe('real tapestry viewer', () => {
     render(<TapestryViewer {...props} />);
     const viewer = await initializedViewer();
     viewer.imageBounds = { x: 3600, y: 1800, width: 800, height: 600 };
-    act(() => viewer.emit('open'));
+    act(() => { viewer.emit('open'); viewer.emit('update-viewport'); });
     props.onViewportChange.mockClear();
 
     act(() => viewer.emit('animation-finish'));
@@ -220,7 +277,7 @@ describe('real tapestry viewer', () => {
     const props = viewerProps();
     render(<TapestryViewer {...props} />);
     const viewer = await initializedViewer();
-    act(() => viewer.emit('open'));
+    act(() => { viewer.emit('open'); viewer.emit('update-viewport'); });
     props.onExplore.mockClear();
 
     act(() => viewer.emit('animation-finish'));

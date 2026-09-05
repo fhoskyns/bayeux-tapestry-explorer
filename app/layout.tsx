@@ -5,6 +5,7 @@ import '@fontsource/source-serif-4/400.css';
 import '@fontsource/source-serif-4/400-italic.css';
 import '@fontsource/source-serif-4/600.css';
 import './globals.css';
+import './explorer.css';
 
 const title = 'The Bayeux Tapestry, Thread by Thread';
 const description =
