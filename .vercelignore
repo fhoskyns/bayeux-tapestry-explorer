@@ -1,7 +1,8 @@
 # Deployment packaging is separate from Git's ignore rules.
 # Ship the static application and release evidence, never local imagery or secrets.
 .git
-.openai
+.openai/*
+!.openai/hosting.json
 .vercel
 .env*
 !.env.example

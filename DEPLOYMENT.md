@@ -5,7 +5,7 @@ Production promotion is deliberately gated. Build previews from a non-production
 ## Provisioning status — 5 September 2026
 
 - The public [GitHub repository](https://github.com/fhoskyns/bayeux-tapestry-explorer) exists with `main`; both application and tile-infrastructure CI jobs pass.
-- The Vercel Hobby project `bayeux-tapestry-explorer` exists in `fhoskyns-projects`, with system environment variables exposed and deployment protection enabled. The GitHub connection still requires the Vercel GitHub app to be installed or granted access to this repository.
+- The Vercel Hobby project `bayeux-tapestry-explorer` exists in `fhoskyns-projects`, with system environment variables exposed and deployment protection enabled. Its GitHub app connection is confirmed and the production branch is `main`; `preview/initial-review` is the non-production review branch.
 - Vercel classified the first CLI deployment as Production despite `--target preview`. The production guard correctly stopped its build; no website was promoted. Keep this guard intact and verify the actual deployment target before treating a deployment as a preview. Do not work around this with an environment override or an unchecked prebuilt upload.
 - `.vercelignore` explicitly excludes local environments, generated imagery, dependencies, and build artifacts. Git exclusions alone must not be relied on for CLI deployment packaging. The corrected source upload was approximately 769 KB, not the 3 GB tile pyramid.
 - The complete local pyramid is verified and its report is committed. Cloudflare authentication is connected, but R2 activation is still required before the storage buckets can be created. No Cloudflare buckets or Worker have been deployed.
