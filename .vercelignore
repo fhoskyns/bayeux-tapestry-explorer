@@ -1,0 +1,26 @@
+# Deployment packaging is separate from Git's ignore rules.
+# Ship the static application and release evidence, never local imagery or secrets.
+.git
+.openai
+.vercel
+.env*
+!.env.example
+**/node_modules
+**/.wrangler
+**/.env*
+dist
+out
+.next
+.vinext
+coverage
+outputs
+work
+infrastructure/deepzoom/generated
+infrastructure/deepzoom/source
+Tapisserie_de_Bayeux.png
+**/*.tif
+**/*.tiff
+**/*.dzi
+**/*_files
+**/*.log
+**/*.tsbuildinfo
