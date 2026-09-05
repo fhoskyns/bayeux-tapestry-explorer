@@ -30,6 +30,7 @@ type TapestryViewerProps = {
   onExplore: (centerFraction: number) => void;
   onViewportChange: (viewport: ViewerViewport) => void;
   onReady?: () => void;
+  onCanvasTap?: () => void;
 };
 
 type ViewerContext = Pick<
@@ -41,6 +42,7 @@ type ViewerContext = Pick<
   | 'onAnnotationActivate'
   | 'onExplore'
   | 'onReady'
+  | 'onCanvasTap'
   | 'onViewportChange'
   | 'reduceMotion'
   | 'scene'
@@ -179,6 +181,7 @@ export function TapestryViewer({
   onExplore,
   onViewportChange,
   onReady,
+  onCanvasTap,
 }: TapestryViewerProps) {
   const elementRef = useRef<HTMLDivElement>(null);
   const transitionRef = useRef<HTMLCanvasElement>(null);
@@ -203,6 +206,7 @@ export function TapestryViewer({
     onAnnotationActivate,
     onExplore,
     onReady,
+    onCanvasTap,
     onViewportChange,
     reduceMotion,
     scene,
@@ -221,6 +225,7 @@ export function TapestryViewer({
       onAnnotationActivate,
       onExplore,
       onReady,
+      onCanvasTap,
       onViewportChange,
       reduceMotion,
       scene,
@@ -233,6 +238,7 @@ export function TapestryViewer({
     onAnnotationActivate,
     onExplore,
     onReady,
+    onCanvasTap,
     onViewportChange,
     reduceMotion,
     scene,
@@ -242,6 +248,7 @@ export function TapestryViewer({
     if (!elementRef.current) return;
 
     let cancelled = false;
+    let resizeFrame = 0;
     let viewer: OpenSeadragonType.Viewer | null = null;
     const failedTiles = failedTilesRef.current;
 
@@ -314,6 +321,12 @@ export function TapestryViewer({
         }
       });
       viewer.addHandler('animation-finish', reportViewport);
+      viewer.addHandler('after-resize', () => {
+        window.cancelAnimationFrame(resizeFrame);
+        resizeFrame = window.requestAnimationFrame(() => {
+          if (!cancelled && contextRef.current.mode !== 'free') fitRef.current();
+        });
+      });
       viewer.addHandler('viewport-change', () => {
         if (!viewer?.viewport) return;
         const item = viewer.world.getItemAt(0);
@@ -351,6 +364,8 @@ export function TapestryViewer({
         const target = event.originalEvent?.target;
         if (target instanceof Element && target.closest('.annotation-marker')) {
           event.preventDefaultAction = true;
+        } else if (event.quick) {
+          contextRef.current.onCanvasTap?.();
         }
       });
       viewer.addHandler('open-failed', () => {
@@ -378,6 +393,7 @@ export function TapestryViewer({
       fitRef.current = () => undefined;
       failedTiles.clear();
       window.clearTimeout(transitionTimerRef.current);
+      window.cancelAnimationFrame(resizeFrame);
       viewer?.destroy();
       viewerRef.current = null;
       runtimeRef.current = null;
@@ -401,12 +417,18 @@ export function TapestryViewer({
         return;
       }
       if (!currentContext.dziUrl) {
-        viewer.viewport.goHome(currentContext.reduceMotion);
+        const image = item.getBounds();
+        const container = viewer.viewport.getContainerSize();
+        const width = image.height * container.x / Math.max(1, container.y);
+        viewer.viewport.fitBounds(new OpenSeadragon.Rect(image.x + (image.width - width) / 2, image.y, width, image.height), currentContext.reduceMotion);
         return;
       }
       const bounds = currentContext.scene.pixelBounds;
+      const container = viewer.viewport.getContainerSize();
+      const width = bounds.height * container.x / Math.max(1, container.y);
+      const left = clamp(bounds.x + (bounds.width - width) / 2, 0, Math.max(0, MASTER_WIDTH - width));
       viewer.viewport.fitBounds(
-        item.imageToViewportRectangle(bounds.x, bounds.y, bounds.width, bounds.height),
+        item.imageToViewportRectangle(left, bounds.y, width, bounds.height),
         currentContext.reduceMotion,
       );
     };

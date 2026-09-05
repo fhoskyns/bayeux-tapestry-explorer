@@ -6,6 +6,7 @@ import { tapestryManifest } from '@/data/tapestry-manifest';
 
 const osd = vi.hoisted(() => {
   type EventData = {
+    quick?: boolean;
     maxReached?: boolean;
     originalEvent?: { code: string };
     tile?: { cacheKey: string; getUrl: () => string };
@@ -14,6 +15,9 @@ const osd = vi.hoisted(() => {
   type Handler = { callback: (event: EventData) => void; once: boolean };
   class Point {
     constructor(public x: number, public y: number) {}
+  }
+  class Rect {
+    constructor(public x: number, public y: number, public width: number, public height: number) {}
   }
   class MockViewer {
     handlers = new Map<string, Handler[]>();
@@ -35,6 +39,7 @@ const osd = vi.hoisted(() => {
     world = { getItemAt: () => this.opened ? this.item : undefined };
     zoomResult = { applyConstraints: vi.fn() };
     viewport = {
+      getContainerSize: () => ({ x: 1200, y: 800 }),
       goHome: vi.fn(),
       fitBounds: vi.fn(),
       resize: vi.fn(),
@@ -82,7 +87,7 @@ const osd = vi.hoisted(() => {
     instances.push(viewer);
     return viewer;
   });
-  return { instances, runtime: Object.assign(create, { Point, Placement: { CENTER: 'center' } }) };
+  return { instances, runtime: Object.assign(create, { Point, Rect, Placement: { CENTER: 'center' } }) };
 });
 
 vi.mock('openseadragon', () => ({ default: osd.runtime }));
@@ -127,7 +132,8 @@ describe('real tapestry viewer', () => {
     expect(screen.queryByText(/loading scene/i)).not.toBeInTheDocument();
     expect(props.onReady).toHaveBeenCalledOnce();
     expect(props.onViewportChange).toHaveBeenCalledOnce();
-    expect(viewer.viewport.goHome).toHaveBeenCalled();
+    expect(viewer.viewport.fitBounds).toHaveBeenCalledWith({ x: 0.125, y: 0, width: 0.75, height: 0.5 }, false);
+    expect(viewer.viewport.goHome).not.toHaveBeenCalled();
 
     view.unmount();
     expect(viewer.destroy).toHaveBeenCalledOnce();
@@ -145,6 +151,30 @@ describe('real tapestry viewer', () => {
     expect(viewer.destroy).not.toHaveBeenCalled();
     expect(viewer.viewport.zoomSpring.animationTime).toBe(0);
     expect(screen.getByRole('button', { name: /note 1, observation: the enthroned king/i })).toBeInTheDocument();
+  });
+
+  it('fills portrait height without stretching the image and keeps Overview as the entire strip', async () => {
+    const props = viewerProps();
+    const view = render(<TapestryViewer {...props} />);
+    const viewer = await initializedViewer();
+    viewer.viewport.getContainerSize = () => ({ x: 390, y: 844 });
+    act(() => { viewer.emit('open'); viewer.emit('update-viewport'); });
+    const width = 0.5 * 390 / 844;
+    expect(viewer.viewport.fitBounds).toHaveBeenCalledWith({ x: (1 - width) / 2, y: 0, width, height: 0.5 }, false);
+    view.rerender(<TapestryViewer {...props} mode="overview" scene={null} />);
+    act(() => { viewer.emit('open'); viewer.emit('update-viewport'); });
+    expect(viewer.viewport.goHome).toHaveBeenCalledWith(false);
+  });
+
+  it('reveals controls on a quick canvas tap but not a drag', async () => {
+    const onCanvasTap = vi.fn();
+    render(<TapestryViewer {...viewerProps()} onCanvasTap={onCanvasTap} />);
+    const viewer = await initializedViewer();
+    act(() => { viewer.emit('open'); viewer.emit('update-viewport'); });
+    act(() => viewer.emit('canvas-click', { quick: true }));
+    expect(onCanvasTap).toHaveBeenCalledOnce();
+    act(() => { viewer.emit('canvas-click', { quick: false }); viewer.emit('canvas-drag-end'); });
+    expect(onCanvasTap).toHaveBeenCalledOnce();
   });
 
   it('waits for loaded pixels to be drawn before declaring the image ready', async () => {

@@ -16,10 +16,12 @@ import Image from 'next/image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogClose, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { TapestryViewer, type ViewerViewport } from '@/components/tapestry-viewer';
 import { hasSeenArrival, rememberArrival, TapestryArrival } from '@/components/tapestry-arrival';
 import type { Annotation, Scene, TapestryManifest } from '@/lib/tapestry-schema';
 import { preloadSceneImages } from '@/lib/image-preload';
+import { useImmersiveControls } from '@/lib/use-immersive-controls';
 
 const MASTER_WIDTH = 482096;
 const OVERVIEW_IMAGE =
@@ -159,9 +161,13 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
   );
   const [copied, setCopied] = useState(false);
   const [arrivalActive, setArrivalActive] = useState(false);
+  const [scenePickerOpen, setScenePickerOpen] = useState(false);
+  const [readingOpen, setReadingOpen] = useState(false);
+  const { edges, reveal } = useImmersiveControls();
   const initializedRef = useRef(false);
   const annotationTriggerRef = useRef<HTMLElement | null>(null);
   const annotationPanelRef = useRef<HTMLDialogElement | null>(null);
+  const readingTriggerRef = useRef<HTMLButtonElement | null>(null);
   const isEditorialPreview = manifest.editorial.status !== 'publication-ready';
   const scenes = manifest.scenes;
   const scene = useMemo(() => scenes.find((item) => item.id === sceneId) ?? null, [sceneId, scenes]);
@@ -190,9 +196,11 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
     setActiveAnnotation(null);
     setViewport(null);
     setInitialViewport(null);
+    setReadingOpen(false);
   }, []);
 
   const goOverview = useCallback(() => {
+    setReadingOpen(false);
     setMode('overview');
     setSceneId(null);
     setActiveAnnotation(null);
@@ -219,6 +227,7 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
 
   useEffect(() => {
     const restoreFromUrl = (firstLoad = false) => {
+      setReadingOpen(false);
       const params = new URLSearchParams(window.location.search);
       const requestedScene = validSceneId(params.get('scene'));
       if (!requestedScene) {
@@ -266,8 +275,9 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
 
   const completeArrival = useCallback(() => {
     setArrivalActive(false);
+    reveal();
     window.setTimeout(() => document.getElementById('viewer-heading')?.focus({ preventScroll: true }), 0);
-  }, []);
+  }, [reveal]);
 
   useEffect(() => {
     if (!reduceMotion || !arrivalActive) return;
@@ -305,7 +315,7 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
       if (
         event.defaultPrevented ||
         (target instanceof HTMLElement &&
-          target.closest('input, select, textarea, button, a, dialog, [data-viewer-canvas="true"]'))
+          target.closest('input, select, textarea, button, a, dialog, [role="dialog"], [data-viewer-canvas="true"]'))
       ) {
         return;
       }
@@ -364,9 +374,10 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
   }, [activeAnnotation, restoreAnnotationFocus, wideLayout]);
 
   const activateAnnotation = useCallback((annotation: Annotation, trigger: HTMLElement) => {
-    annotationTriggerRef.current = trigger;
+    annotationTriggerRef.current = readingOpen ? readingTriggerRef.current : trigger;
+    setReadingOpen(false);
     setActiveAnnotation(annotation);
-  }, []);
+  }, [readingOpen]);
 
   const closeAnnotation = useCallback(() => {
     if (!activeAnnotation) return;
@@ -398,8 +409,9 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
 
   return (
     <>
+    <Dialog open={readingOpen && !!scene} onOpenChange={setReadingOpen}>
     <main className="explorer" inert={arrivalActive ? true : undefined}>
-      <div className="explorer-stage">
+      <div className="explorer-stage" data-top-open={edges.top} data-bottom-open={edges.bottom || scenePickerOpen}>
         <header className="explorer-header">
           <h1>
             <a href="/" onClick={(event) => { event.preventDefault(); goOverview(); }}>
@@ -424,6 +436,7 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
                 onAnnotationActivate={activateAnnotation}
                 onExplore={enterFreeExploration}
                 onViewportChange={setViewport}
+                onCanvasTap={reveal}
                 reduceMotion={reduceMotion}
                 scene={scene}
               />
@@ -467,6 +480,7 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
           ) : null}
           </div>
         </section>
+        <div className="bottom-chrome">
         <div className="navigation-dock">
           <p className="scene-caption" key={scene?.id ?? 'overview'}>
             {scene ? <><span>{scene.id}</span> {scene.title}</> : 'The complete surviving tapestry · 68.3 metres'}
@@ -483,6 +497,7 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
               type="button"
             ><ArrowLeft aria-hidden="true" /><span>Back</span></button>
             <Select
+              onOpenChange={setScenePickerOpen}
               onValueChange={(value) => {
                 if (value === 'overview') goOverview();
                 else if (value) openScene(scenes[Number(value) - 1]);
@@ -517,27 +532,29 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
           ) : scene?.number === 58 ? (
             <button className="resume-link" onClick={goOverview} type="button">Return to overview</button>
           ) : (
-            <p className="gesture-hint">{scene ? 'Hover or tap a number to look closer' : 'Choose a scene below, or press Start'}</p>
+            <p className="gesture-hint">{scene ? 'Drag to explore · tap the image to reveal controls' : 'Choose a scene below, or press Start'}</p>
           )}
         </div>
         <SceneNavigator activeScene={scene} mode={mode} onJump={openScene} scenes={scenes} viewport={viewport} />
         <footer className="explorer-footer">
           <span>{isEditorialPreview ? 'Editorial preview · notes awaiting review' : 'An independent, non-commercial project'}</span>
           <div>
+            {scene ? <DialogTrigger render={<button aria-label="Read this scene" className="reading-toggle" ref={readingTriggerRef} type="button" />}><BookOpenText aria-hidden="true" /> Read this scene</DialogTrigger> : null}
             <button aria-label="Copy link to this view" className="share-link" onClick={() => void copyLink()} type="button">
               {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}{copied ? 'Copied' : 'Share'}
             </button>
             <a className="nav-link" href="/sources">Sources &amp; rights</a>
           </div>
         </footer>
+        </div>
       </div>
       {scene ? (
-        <details className="scene-reading-disclosure" key={scene.id}>
-          <summary><BookOpenText aria-hidden="true" /> Read this scene <span>Latin, translation &amp; notes</span></summary>
+        <DialogContent className="scene-reading-disclosure explorer" showCloseButton={false} finalFocus={() => annotationPanelRef.current?.querySelector<HTMLElement>('.annotation-panel__close') ?? readingTriggerRef.current} key={scene.id}>
+          <DialogClose render={<button className="reading-close" aria-label="Close scene reading" type="button" />}><X aria-hidden="true" /></DialogClose>
           <section className="scene-reading">
           <div className="scene-summary">
             <p className="eyebrow">Scene {scene.id} of 58 · modern editorial title</p>
-            <h2>Reading the scene</h2>
+            <DialogTitle>Reading the scene</DialogTitle>
             <p>{scene.summary}</p>
             <div className="scene-citations">
               <span>Scene references</span>
@@ -579,7 +596,7 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
             </div>
           </div>
           </section>
-        </details>
+        </DialogContent>
       ) : null}
 
       <p className="image-provenance">
@@ -588,6 +605,7 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
           : 'Wikimedia Commons preview images, resized for viewing. Full-resolution facsimile pending image hosting.'}
       </p>
     </main>
+    </Dialog>
     {arrivalActive ? <TapestryArrival onComplete={completeArrival} /> : null}
     </>
   );

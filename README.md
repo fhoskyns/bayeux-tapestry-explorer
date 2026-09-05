@@ -10,9 +10,11 @@ The complete lossless Deep Zoom pyramid passed full verification on 5 September 
 
 ## Experience
 
+- An optional, skippable 2.6-second overhead globe-to-London descent using real NASA, Copernicus/EOX and Environment Agency imagery; no live map API. See [imagery provenance](./docs/intro-assets.md).
+- A pure-white, full-viewport viewer. Title and controls reveal at the top/bottom edges, by keyboard, or on a canvas tap; they never shrink the image.
 - A true-proportion overview of the complete surviving strip.
 - A 58-scene guided tour with previous/next controls and shareable URLs.
-- Pan, wheel/pinch zoom, explicit image controls, and resumable free exploration.
+- Height-fitted scenes, horizontal dragging, wheel/pinch zoom, explicit image controls, and resumable free exploration. Vertical movement is locked while the whole image height is visible and unlocks for detail zoom.
 - A complete-strip navigator with hover magnification, click-to-jump, viewport indication, and an accessible scene selector.
 - Keyboard-accessible annotation markers, a desktop evidence panel, a mobile bottom panel, Latin tituli, draft project translations, and direct source links.
 
@@ -27,6 +29,7 @@ pnpm dev
 ```
 
 Without `VITE_TAPESTRY_TILE_BASE_URL`, the app deliberately uses resized Wikimedia Commons preview imagery. No credential is ever exposed to the browser.
+Preview dragging is within the selected source image. Continuous panning across the entire original requires the configured Deep Zoom host; separate preview photographs are never stitched together as a purported accurate facsimile.
 
 ## Checks
 

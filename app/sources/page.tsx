@@ -75,11 +75,14 @@ export default function SourcesPage() {
       <section className="credit-block" id="intro-credits">
         <h2>Opening sequence</h2>
         <p>
-          The geographic opening refers to the <a href="https://www.britishmuseum.org/exhibitions/bayeux-tapestry">British Museum’s September 2026–July 2027 loan exhibition</a>, not the tapestry’s permanent home in Bayeux. The transition is illustrative; it does not reproduce the exhibition interior. This project is not affiliated with either museum.
+          The overhead opening refers to the <a href="https://www.britishmuseum.org/exhibitions/bayeux-tapestry">British Museum’s September 2026–July 2027 loan exhibition</a>, not the tapestry’s permanent home in Bayeux. It uses historical satellite and vertical aerial imagery, not a live view or a reconstruction of the exhibition interior. This project is not affiliated with either museum, Google or the imagery providers.
         </p>
         <p>
-          Map: <a href="https://www.naturalearthdata.com/about/terms-of-use/">Natural Earth, public domain</a>, 1:110 million land data, rendered in an equirectangular projection. Photograph: <a href="https://commons.wikimedia.org/wiki/File:British_Museum_Facade.JPG">British Museum Facade, Ludi Ling (2008)</a>, <a href="https://creativecommons.org/licenses/by-sa/3.0/">CC BY-SA 3.0</a>, resized by Wikimedia Commons and cropped in the display. The photograph and its display adaptation remain under CC BY-SA 3.0, outside the code and editorial licences.
+          Global and regional satellite imagery: <a href="https://science.nasa.gov/earth/earth-observatory/blue-marble-next-generation/base-map/">NASA Earth Observatory / Reto Stöckli, Blue Marble Next Generation (August 2004)</a>, with regional crops via NASA GIBS. NASA imagery is used under its <a href="https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance">open data-use guidance</a>.
         </p>
+        <p>London satellite imagery: <a href="https://cloudless.eox.at">EOxCloudless</a> by <a href="https://eox.at">EOX IT Services GmbH</a> (Contains modified Copernicus Sentinel data 2016), <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>. Geographic crop of the 2016 mosaic.</p>
+        <p>Museum and neighbourhood overhead photography: <a href="https://environment.data.gov.uk/dataset/dae203a8-ba24-4c54-bab0-866b9faadb58">Environment Agency RGB vertical aerial photography</a>, survey catalogued 2008. © Environment Agency copyright and/or database right 2022. All rights reserved. Licensed under the <a href="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/">Open Government Licence v3.0</a>.</p>
+        <p>Intro assets are cropped, normally resampled to geographic coordinates where necessary, and compressed for display. They contain no generated or reconstructed buildings and remain under their source terms, outside the code and editorial licences. The animation uses self-hosted files with no live or metered map service.</p>
         <p>The introduction uses one local device preference to remember that it has been seen. No cookies, tracking or visitor data are sent.</p>
       </section>
 

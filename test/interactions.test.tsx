@@ -6,6 +6,11 @@ import { tapestryManifest } from '@/data/tapestry-manifest';
 import SourcesPage from '@/app/sources/page';
 import { ARRIVAL_DURATION, ARRIVAL_PREFERENCE, TapestryArrival } from '@/components/tapestry-arrival';
 
+vi.mock('@/lib/satellite-flight', () => ({
+  FLIGHT_DURATION: 2600,
+  createSatelliteFlight: vi.fn(async () => ({ draw: vi.fn(), dispose: vi.fn() })),
+}));
+
 vi.mock('@/components/tapestry-viewer', () => ({
   TapestryViewer: ({ initialViewport, mode, onExplore, onViewportChange, reduceMotion, scene }: {
     initialViewport?: { x: number; y: number; width: number; height: number } | null;
@@ -71,7 +76,7 @@ describe('guided tour interactions', () => {
   it('plays the first-visit opening, lets visitors skip, and never replays from Home', async () => {
     window.localStorage.removeItem(ARRIVAL_PREFERENCE);
     render(<TapestryExplorer manifest={tapestryManifest} />);
-    expect(screen.getByRole('dialog', { name: /a journey/i })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: /a satellite journey/i })).toBeInTheDocument();
     expect(document.querySelector('main')).toHaveAttribute('inert');
     fireEvent.click(screen.getByRole('button', { name: /skip introduction/i }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -157,6 +162,18 @@ describe('guided tour interactions', () => {
     render(<SourcesPage />);
     expect(screen.getByRole('link', { name: /back to the tapestry/i })).toHaveAttribute('href', '/');
     expect(screen.getByRole('link', { name: 'The Bayeux Tapestry, Thread by Thread' })).toHaveAttribute('href', '/');
+  });
+
+  it('opens scene reading with focus, then closes with Escape and returns focus', async () => {
+    window.history.replaceState(null, '', '/?scene=01');
+    render(<TapestryExplorer manifest={tapestryManifest} />);
+    const trigger = screen.getByRole('button', { name: /read this scene/i });
+    fireEvent.click(trigger);
+    const reading = screen.getByRole('dialog', { name: /reading the scene/i });
+    await waitFor(() => expect(reading).toContainElement(document.activeElement as HTMLElement));
+    fireEvent.keyDown(reading, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: /reading the scene/i })).not.toBeInTheDocument());
+    await waitFor(() => expect(trigger).toHaveFocus());
   });
 
   it('can traverse all 58 scenes and exposes the final return action', async () => {

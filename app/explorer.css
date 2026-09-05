@@ -1,28 +1,18 @@
 /* The embroidery is the surface. Everything else stays at its edges. */
 .arrival { position: fixed; z-index: 100; inset: 0; width: 100%; max-width: none; height: 100%; max-height: none; margin: 0; padding: 0; border: 0; overflow: hidden; background: #fff; isolation: isolate; }
-.arrival-map { position: absolute; left: 50%; top: 50%; width: min(110vw, 1100px); aspect-ratio: 2 / 1; transform-origin: 49.96475% 21.378%; transform: translate(-50%, -50%) scale(.75); }
-.arrival-map img { display: block; width: 100%; height: auto; }
-.arrival-location { position: absolute; left: 49.96475%; top: 21.378%; width: 2px; height: 2px; border-radius: 50%; background: var(--oxblood); transform: translate(-50%, -50%); }
-.arrival-museum { position: absolute; inset: 0; opacity: 0; transform: scale(.88); }
-.arrival-museum img { object-fit: cover; object-position: 50% 48%; }
-.arrival-museum::after { position: absolute; inset: 0; background: linear-gradient(transparent 50%, #0007); content: ''; }
+.arrival-satellite { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
 .arrival-caption { position: absolute; left: 24px; right: 24px; bottom: 110px; height: 70px; text-align: center; font-family: "Source Serif 4", Georgia, serif; font-size: clamp(26px, 4vw, 48px); letter-spacing: -.025em; }
 .arrival-caption > span { position: absolute; inset: 0; opacity: 0; }
 .arrival-caption small { display: block; margin-top: 8px; font-family: Inter, sans-serif; font-size: 14px; font-weight: 400; letter-spacing: normal; }
-.arrival-caption__museum { color: #fff; text-shadow: 0 2px 12px #0005; }
-.arrival.without-photo .arrival-caption__museum { color: var(--ink); text-shadow: none; }
+.arrival-caption__london, .arrival-caption__museum { color: #fff; text-shadow: 0 2px 12px #000b; }
 .arrival-skip, .arrival-credit { position: absolute; z-index: 2; display: inline-flex; min-height: 44px; align-items: center; border: 1px solid #e8e8e8; border-radius: 40px; background: #ffffffed; color: var(--ink); padding: 0 18px; font-size: 14px; text-decoration: none; }
 .arrival-skip { right: 24px; bottom: 24px; }
 .arrival-credit { left: 24px; bottom: 24px; font-size: 12px; }
 .arrival.is-running { animation: arrival-reveal 2.6s linear both; }
-.arrival.is-running .arrival-map { animation: arrival-zoom 2.6s cubic-bezier(.45, 0, .25, 1) both; }
-.arrival.is-running .arrival-museum { animation: arrival-museum 2.6s cubic-bezier(.2, .6, .35, 1) both; }
 .arrival.is-running .arrival-caption__world { animation: arrival-world-label 2.6s linear both; }
 .arrival.is-running .arrival-caption__london { animation: arrival-london-label 2.6s linear both; }
 .arrival.is-running .arrival-caption__museum { animation: arrival-museum-label 2.6s linear both; }
-@keyframes arrival-zoom { 0%, 8% { transform: translate(-50%, -50%) scale(.75); opacity: 1; } 50% { transform: translate(-49.96475%, -21.378%) scale(13); opacity: 1; } 70%, 100% { transform: translate(-49.96475%, -21.378%) scale(32); opacity: 0; } }
-@keyframes arrival-museum { 0%, 48% { opacity: 0; transform: scale(.86); } 64% { opacity: 1; transform: scale(1); } 100% { opacity: 1; transform: scale(1.45); } }
-@keyframes arrival-reveal { 0%, 82% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes arrival-reveal { 0%, 88% { opacity: 1; } 100% { opacity: 0; } }
 @keyframes arrival-world-label { 0%, 18% { opacity: 1; } 30%, 100% { opacity: 0; } }
 @keyframes arrival-london-label { 0%, 24% { opacity: 0; } 34%, 46% { opacity: 1; } 56%, 100% { opacity: 0; } }
 @keyframes arrival-museum-label { 0%, 52% { opacity: 0; } 64%, 87% { opacity: 1; } 100% { opacity: 0; } }
@@ -146,4 +136,38 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .explorer *, .explorer *::before, .explorer *::after { animation: none !important; transition: none !important; }
+}
+
+/* Immersive mode: chrome overlays the full-height image; it never reserves space. */
+.explorer-stage { display: block; position: relative; height: 100svh; min-height: 0; overflow: hidden; }
+.explorer .viewer-section { position: absolute; inset: 0; padding: 0; }
+.explorer .viewer-frame, .explorer .tapestry-canvas { cursor: grab; }
+.explorer .viewer-frame:active, .explorer .tapestry-canvas:active { cursor: grabbing; }
+.explorer-header { position: absolute; z-index: 20; top: 0; left: 0; right: 0; padding: 18px 24px 28px; background: linear-gradient(#fffffff7 60%, #ffffff00); transform: translateY(-102%); opacity: 0; transition: transform .45s cubic-bezier(.2,.8,.2,1), opacity .3s; pointer-events: none; }
+.explorer-stage[data-top-open='true'] .explorer-header, .explorer-header:has(:focus-visible) { transform: translateY(0); opacity: 1; pointer-events: auto; }
+.bottom-chrome { position: absolute; z-index: 20; bottom: 0; left: 0; right: 0; padding-top: 28px; background: linear-gradient(#ffffff00, #fffffff7 20%); transform: translateY(102%); opacity: 0; transition: transform .45s cubic-bezier(.2,.8,.2,1), opacity .3s; pointer-events: none; }
+.explorer-stage[data-bottom-open='true'] .bottom-chrome, .bottom-chrome:has(:focus-visible) { transform: translateY(0); opacity: 1; pointer-events: auto; }
+.explorer .image-controls { top: 100px; right: 20px; opacity: 0; transform: translateX(160px); pointer-events: none; transition: transform .4s, opacity .3s; }
+.explorer-stage[data-top-open='true'] .image-controls, .image-controls:has(:focus-visible) { transform: none; opacity: 1; pointer-events: auto; }
+.navigation-dock { padding-top: 0; }
+.scene-caption { margin-bottom: 8px; color: var(--ink); }
+.gesture-hint { margin: 0; min-height: 28px; }
+.explorer .tapestry-navigator { margin-inline: 32px; }
+.explorer-footer { padding-inline: 24px; }
+.reading-toggle { display: inline-flex; min-height: 44px; align-items: center; gap: 7px; border: 0; background: transparent; color: var(--quiet); font-size: 14px; }
+.reading-toggle svg { width: 16px; }
+.scene-reading-disclosure { position: fixed; z-index: 50; inset: 10vh max(20px, calc((100vw - 1080px) / 2)); width: auto; max-width: none; transform: none; translate: none; overflow-y: auto; margin: 0; border: 1px solid var(--line); border-radius: 18px; background: #fff; padding: 44px 32px 24px; box-shadow: 0 12px 80px #0003; }
+.reading-close { position: absolute; top: 10px; right: 10px; display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid var(--line); border-radius: 50%; background: #fff; }
+.reading-close svg { width: 18px; }
+.explorer .image-provenance { display: none; }
+.explorer .annotation-panel { z-index: 70; }
+@media (max-width: 600px) {
+  .explorer-header { padding: max(18px, env(safe-area-inset-top)) 16px 24px; }
+  .explorer .image-controls { top: 116px; right: 10px; }
+  .bottom-chrome { padding-top: 24px; }
+  .explorer .tapestry-navigator { margin-inline: 18px; }
+  .explorer-footer { flex-wrap: wrap; justify-content: center; padding: 0 12px max(8px, env(safe-area-inset-bottom)); gap: 0; }
+  .explorer-footer > span { order: 2; max-width: none; width: 100%; text-align: center; font-size: 12px; }
+  .explorer-footer > div { gap: 14px; }
+  .scene-reading-disclosure { inset: 8vh 8px 0; padding: 42px 20px 20px; border-radius: 18px 18px 0 0; }
 }

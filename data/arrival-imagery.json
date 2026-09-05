@@ -1,0 +1,49 @@
+{
+  "version": 2,
+  "accessDate": "2026-09-05",
+  "projection": "EPSG:4326 equirectangular, north up",
+  "layers": [
+    {
+      "url": "/arrival/earth.jpg", "dimensions": [4096, 2048], "bounds": [-180, -90, 180, 90],
+      "sha256": "3c2742250d6936f46f865d88ed4dd9c7f94faabd5ba21d5ce1432a0f3e0aaf2e",
+      "source": "https://assets.science.nasa.gov/content/dam/science/esd/eo/images/bmng/bmng-base/august/world.200408.3x5400x2700.jpg",
+      "credit": "NASA Earth Observatory / Reto Stöckli, Blue Marble Next Generation, August 2004",
+      "rights": "NASA open data-use guidance"
+    },
+    {
+      "url": "/arrival/britain.jpg", "dimensions": [2000, 1600], "bounds": [-15, 45, 10, 65],
+      "sha256": "d79af1d02354756582078eb0abd964c89caf329d02808dfc8dcf2d734ada7cea",
+      "source": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?version=1.3.0&service=WMS&request=GetMap&format=image/jpeg&styles=&bbox=45,-15,65,10&CRS=EPSG:4326&HEIGHT=1600&WIDTH=2000&layers=BlueMarble_NextGeneration&TIME=2004-08-01",
+      "credit": "NASA Earth Observatory / Reto Stöckli, regional imagery via NASA GIBS, August 2004",
+      "rights": "NASA open data-use guidance"
+    },
+    {
+      "url": "/arrival/england.jpg", "dimensions": [1440, 960], "bounds": [-3.2, 49.5, 2.8, 53.5],
+      "sha256": "89c02691b811ad641d18ec0a4ce54643baf00dec25371491bcbb73538687a4cc",
+      "source": "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?version=1.3.0&service=WMS&request=GetMap&format=image/jpeg&styles=&bbox=49.5,-3.2,53.5,2.8&CRS=EPSG:4326&HEIGHT=960&WIDTH=1440&layers=BlueMarble_NextGeneration&TIME=2004-08-01",
+      "credit": "NASA Earth Observatory / Reto Stöckli, regional imagery via NASA GIBS, August 2004",
+      "rights": "NASA open data-use guidance"
+    },
+    {
+      "url": "/arrival/london.jpg", "dimensions": [2048, 2048], "bounds": [-0.3769, 51.2695, 0.1231, 51.7695],
+      "sha256": "9d2448a8a1e7d888775db5303ba3d1e831c7fcf66772566fba4ccb45d5301ca2",
+      "source": "https://tiles.maps.eox.at/map?service=WMS&version=1.1.1&request=GetMap&layers=s2cloudless&styles=&srs=EPSG:4326&bbox=-0.3769,51.2695,0.1231,51.7695&width=2048&height=2048&format=image/jpeg",
+      "credit": "EOxCloudless by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2016). Geographic crop.",
+      "rights": "CC BY 4.0, https://creativecommons.org/licenses/by/4.0/"
+    },
+    {
+      "url": "/arrival/bloomsbury.jpg", "dimensions": [2400, 1500], "bounds": [-0.1415, 51.5101, -0.1124, 51.5215],
+      "sha256": "d2d674ea09495bef5a1c192e4f30c3c3d313d2727daa5dabb4cb67522e0be636",
+      "source": "https://environment.data.gov.uk/dataset/dae203a8-ba24-4c54-bab0-866b9faadb58",
+      "credit": "© Environment Agency copyright and/or database right 2022. All rights reserved. Survey catalogued 2008.",
+      "rights": "Open Government Licence v3.0, https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/"
+    },
+    {
+      "url": "/arrival/museum.jpg", "dimensions": [1200, 1200], "bounds": [-0.1303, 51.5174, -0.1235, 51.5216],
+      "sha256": "96ac6d1c75e700d3761b90f12a0f7011f8abf18fd23c91b6569b77a744bbe1eb",
+      "source": "https://environment.data.gov.uk/dataset/dae203a8-ba24-4c54-bab0-866b9faadb58",
+      "credit": "© Environment Agency copyright and/or database right 2022. All rights reserved. Survey catalogued 2008.",
+      "rights": "Open Government Licence v3.0, https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/"
+    }
+  ]
+}
