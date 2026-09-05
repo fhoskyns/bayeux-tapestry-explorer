@@ -12,7 +12,9 @@ The master image is not stored in Git and must never be served by the tile Worke
 
 ## Current preview
 
-Until the complete DZI pyramid passes full verification and is deployed, the application displays resized Wikimedia Commons overview and scene images. Those preview assets are not represented as pixel-identical native-resolution tiles.
+The complete `v1` DZI pyramid passed the full-pixel verifier on 5 September 2026. Its [tracked report](./release-evidence/deepzoom-v1-verification.json) matches the source lock and records 3,899 lossless WebP tiles across levels 0–19, 6,816 checked seams, and pixel equality against the locked master for all 2,826 native-resolution tiles. The tiles total 3,065,956,662 bytes. This proves faithful derivation from the locked digital file, not identity with the physical object or authority to publish it.
+
+Until the verified pyramid is deployed and `VITE_TAPESTRY_TILE_BASE_URL` is configured, the application displays resized Wikimedia Commons overview and scene images. Those preview assets are not represented as pixel-identical native-resolution tiles.
 
 Scene bounds are proportional estimates derived from the widths of separate museum-numbered scene images. Hotspot positions are editorial placement hints. Both require calibration against the final master.
 

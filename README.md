@@ -6,6 +6,8 @@ An English-first, non-commercial interactive exploration of the complete survivi
 
 This repository is an **editorial and technical preview**, not a production publication. It contains all 58 modern museum scene divisions and 116 draft notes, but every transcription, translation, citation locator, scene boundary, and hotspot position still requires specialist review. The release check is designed to fail until that evidence exists.
 
+The complete lossless Deep Zoom pyramid passed full verification on 5 September 2026: 3,899 tiles, 6,816 seams, and pixel equality against the locked master for all 2,826 native-resolution tiles. The compact [verification report](./release-evidence/deepzoom-v1-verification.json) is tracked; imagery remains outside Git. This technical result does not constitute editorial approval or publication clearance.
+
 ## Experience
 
 - A true-proportion overview of the complete surviving strip.
