@@ -86,7 +86,6 @@ export function TapestryArrival({ onComplete }: { onComplete: () => void }) {
       <canvas aria-hidden="true" className="arrival-satellite" ref={canvasRef} />
       <p className="sr-only" id="arrival-description">A short overhead journey from Earth to London and the British Museum, the venue for the announced 2026–27 loan exhibition from France.</p>
       <div className="arrival-caption" aria-hidden="true">
-        <span className="arrival-caption__world">A thread through history</span>
         <span className="arrival-caption__london">London</span>
         <span className="arrival-caption__museum">The British Museum<small>On loan from France · 2026–27</small></span>
       </div>

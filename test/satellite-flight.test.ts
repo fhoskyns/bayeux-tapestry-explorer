@@ -2,10 +2,26 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { createSatelliteFlight, flightAltitude, SATELLITE_LAYERS, satelliteUvMapping } from '@/lib/satellite-flight';
+import { createSatelliteFlight, flightAltitude, SATELLITE_LAYERS, satelliteLayerOpacity, satelliteUvMapping } from '@/lib/satellite-flight';
 import imagery from '@/data/arrival-imagery.json';
 
 describe('satellite opening', () => {
+  it('fades detail in as its geographic footprint fills the viewport, without distant rectangular patches', () => {
+    for (const aspect of [320 / 740, 1, 1440 / 900]) {
+      for (const layer of SATELLITE_LAYERS.slice(1)) {
+        expect(satelliteLayerOpacity(layer.bounds, 18_000_000, aspect)).toBe(0);
+        expect(satelliteLayerOpacity(layer.bounds, 1, aspect)).toBe(1);
+        let previous = 0;
+        for (let step = 0; step <= 100; step += 1) {
+          const opacity = satelliteLayerOpacity(layer.bounds, flightAltitude(step / 100, aspect), aspect);
+          expect(opacity).toBeGreaterThanOrEqual(previous);
+          expect(opacity).toBeLessThanOrEqual(1);
+          previous = opacity;
+        }
+      }
+    }
+  });
+
   it('descends continuously from the globe to roof scale, clamping invalid progress', () => {
     expect(flightAltitude(-1)).toBeCloseTo(18_000_000);
     expect(flightAltitude(2)).toBeCloseTo(360);

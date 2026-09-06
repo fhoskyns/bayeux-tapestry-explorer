@@ -31,6 +31,19 @@ export function satelliteUvMapping(bounds: SatelliteLayer['bounds']) {
   ];
 }
 
+/** Reveal detail only once its geographic coverage approaches the viewport. */
+export function satelliteLayerOpacity(bounds: SatelliteLayer['bounds'], altitude: number, aspect: number) {
+  const [u, v, longitudeScale, latitudeScale] = satelliteUvMapping(bounds);
+  const latitudeSpan = Math.max(1, altitude) * 0.48 / 6371008.8;
+  const longitudeSpan = latitudeSpan * Math.max(0.1, aspect) / Math.cos(MUSEUM_LOCATION.latitude * Math.PI / 180);
+  const coverage = Math.min(
+    Math.min(u, 1 - u) / (longitudeScale * longitudeSpan),
+    Math.min(v, 1 - v) / (latitudeScale * latitudeSpan),
+  );
+  const t = Math.max(0, Math.min(1, (coverage - 0.7) / 0.7));
+  return t * t * (3 - 2 * t);
+}
+
 const vertexSource = `
 attribute vec2 position;
 varying vec2 screen;
@@ -56,12 +69,13 @@ uniform vec4 mapping2;
 uniform vec4 mapping3;
 uniform vec4 mapping4;
 uniform vec4 mapping5;
+uniform float detailOpacity[5];
 
 vec4 region(sampler2D imagery, vec4 mapping, vec2 delta) {
   vec2 uv = mapping.xy + delta * mapping.zw;
   float edge = min(min(uv.x, 1.0 - uv.x), min(uv.y, 1.0 - uv.y));
   if (edge <= 0.0) return vec4(0.0);
-  return vec4(texture2D(imagery, uv).rgb, smoothstep(0.0, 0.055, edge));
+  return vec4(texture2D(imagery, uv).rgb, smoothstep(0.0, 0.15, edge));
 }
 
 void main() {
@@ -92,15 +106,15 @@ void main() {
   worldUv.x = fract(worldUv.x);
   vec3 color = texture2D(imagery0, worldUv).rgb;
   vec4 detail = region(imagery1, mapping1, delta);
-  color = mix(color, detail.rgb, detail.a);
+  color = mix(color, detail.rgb, detail.a * detailOpacity[0]);
   detail = region(imagery2, mapping2, delta);
-  color = mix(color, detail.rgb, detail.a);
+  color = mix(color, detail.rgb, detail.a * detailOpacity[1]);
   detail = region(imagery3, mapping3, delta);
-  color = mix(color, detail.rgb, detail.a);
+  color = mix(color, detail.rgb, detail.a * detailOpacity[2]);
   detail = region(imagery4, mapping4, delta);
-  color = mix(color, detail.rgb, detail.a);
+  color = mix(color, detail.rgb, detail.a * detailOpacity[3]);
   detail = region(imagery5, mapping5, delta);
-  color = mix(color, detail.rgb, detail.a);
+  color = mix(color, detail.rgb, detail.a * detailOpacity[4]);
   // Gentle spherical lighting disappears at ground scale.
   color *= mix(0.78, 1.0, max(0.0, p.z / length(p)));
   gl_FragColor = vec4(color, 1.0);
@@ -194,6 +208,8 @@ export async function createSatelliteFlight(canvas: HTMLCanvasElement, signal: A
     gl.uniform1f(gl.getUniformLocation(program, 'originLatitudeRadians'), latitude);
     const altitude = gl.getUniformLocation(program, 'altitude');
     const aspect = gl.getUniformLocation(program, 'aspect');
+    const detailOpacity = gl.getUniformLocation(program, 'detailOpacity[0]');
+    const opacityValues = new Float32Array(5);
     return {
       draw(progress) {
         if (disposed || gl.isContextLost()) return;
@@ -203,8 +219,14 @@ export async function createSatelliteFlight(canvas: HTMLCanvasElement, signal: A
         const height = Math.max(1, Math.round(canvas.clientHeight * density));
         if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
         gl.viewport(0, 0, width, height);
-        gl.uniform1f(aspect, width / height);
-        gl.uniform1f(altitude, flightAltitude(progress, width / height));
+        const ratio = width / height;
+        const cameraHeight = flightAltitude(progress, ratio);
+        gl.uniform1f(aspect, ratio);
+        gl.uniform1f(altitude, cameraHeight);
+        for (let index = 0; index < opacityValues.length; index += 1) {
+          opacityValues[index] = satelliteLayerOpacity(SATELLITE_LAYERS[index + 1].bounds, cameraHeight, ratio);
+        }
+        gl.uniform1fv(detailOpacity, opacityValues);
         gl.drawArrays(gl.TRIANGLES, 0, 6);
       },
       dispose,

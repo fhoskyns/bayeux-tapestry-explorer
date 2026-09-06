@@ -9,11 +9,9 @@
 .arrival-skip { right: 24px; bottom: 24px; }
 .arrival-credit { left: 24px; bottom: 24px; font-size: 12px; }
 .arrival.is-running { animation: arrival-reveal 2.6s linear both; }
-.arrival.is-running .arrival-caption__world { animation: arrival-world-label 2.6s linear both; }
 .arrival.is-running .arrival-caption__london { animation: arrival-london-label 2.6s linear both; }
 .arrival.is-running .arrival-caption__museum { animation: arrival-museum-label 2.6s linear both; }
 @keyframes arrival-reveal { 0%, 88% { opacity: 1; } 100% { opacity: 0; } }
-@keyframes arrival-world-label { 0%, 18% { opacity: 1; } 30%, 100% { opacity: 0; } }
 @keyframes arrival-london-label { 0%, 24% { opacity: 0; } 34%, 46% { opacity: 1; } 56%, 100% { opacity: 0; } }
 @keyframes arrival-museum-label { 0%, 52% { opacity: 0; } 64%, 87% { opacity: 1; } 100% { opacity: 0; } }
 @media (max-width: 600px) {
@@ -170,4 +168,13 @@
   .explorer-footer > span { order: 2; max-width: none; width: 100%; text-align: center; font-size: 12px; }
   .explorer-footer > div { gap: 14px; }
   .scene-reading-disclosure { inset: 8vh 8px 0; padding: 42px 20px 20px; border-radius: 18px 18px 0 0; }
+}
+
+@media (max-width: 360px) {
+  .explorer .tour-controls { gap: 2px; padding: 4px; }
+  .explorer .tour-button { min-width: 74px; padding-inline: 10px; gap: 8px; }
+  .explorer .scene-picker-trigger { min-width: 70px; padding-inline: 4px; }
+  .explorer-footer > div { gap: 8px; }
+  .explorer-footer .reading-toggle, .explorer-footer .nav-link { font-size: 12px; white-space: nowrap; }
+  .explorer-footer .reading-toggle { gap: 5px; }
 }

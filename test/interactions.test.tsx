@@ -104,6 +104,17 @@ describe('guided tour interactions', () => {
     expect(window.location.search).toBe('?scene=07');
   });
 
+  it('allows a deliberate replay without changing the saved preference or replaying from Home', () => {
+    window.history.replaceState(null, '', '/?intro=replay');
+    render(<TapestryExplorer manifest={tapestryManifest} />);
+    expect(screen.getByRole('dialog', { name: /a satellite journey/i })).toBeInTheDocument();
+    expect(window.location.search).toBe('?scene=01');
+    fireEvent.click(screen.getByRole('button', { name: /skip introduction/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Overview — complete tapestry' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(window.localStorage.getItem(ARRIVAL_PREFERENCE)).toBe('1');
+  });
+
   it('automatically completes the opening in 2.6 seconds', async () => {
     vi.useFakeTimers();
     const complete = vi.fn();
@@ -160,6 +171,7 @@ describe('guided tour interactions', () => {
     unmount();
 
     render(<SourcesPage />);
+    expect(screen.getByRole('link', { name: 'Replay opening' })).toHaveAttribute('href', '/?intro=replay');
     expect(screen.getByRole('link', { name: /back to the tapestry/i })).toHaveAttribute('href', '/');
     expect(screen.getByRole('link', { name: 'The Bayeux Tapestry, Thread by Thread' })).toHaveAttribute('href', '/');
   });

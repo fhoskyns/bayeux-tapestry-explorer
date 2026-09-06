@@ -231,10 +231,11 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
       const params = new URLSearchParams(window.location.search);
       const requestedScene = validSceneId(params.get('scene'));
       if (!requestedScene) {
-        if (firstLoad && !window.location.search && !hasSeenArrival()) {
+        const deliberateReplay = params.size === 1 && params.get('intro') === 'replay';
+        if (firstLoad && (deliberateReplay || (!window.location.search && !hasSeenArrival()))) {
           openScene(scenes[0]);
           const skipMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-          setArrivalActive(!skipMotion && !hasSeenArrival());
+          setArrivalActive(!skipMotion);
           rememberArrival();
           initializedRef.current = true;
           return;

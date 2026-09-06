@@ -74,6 +74,7 @@ export default function SourcesPage() {
 
       <section className="credit-block" id="intro-credits">
         <h2>Opening sequence</h2>
+        <p><a href="/?intro=replay">Replay opening</a></p>
         <p>
           The overhead opening refers to the <a href="https://www.britishmuseum.org/exhibitions/bayeux-tapestry">British Museum’s September 2026–July 2027 loan exhibition</a>, not the tapestry’s permanent home in Bayeux. It uses historical satellite and vertical aerial imagery, not a live view or a reconstruction of the exhibition interior. This project is not affiliated with either museum, Google or the imagery providers.
         </p>

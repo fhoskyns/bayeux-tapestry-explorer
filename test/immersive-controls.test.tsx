@@ -13,6 +13,8 @@ describe('immersive edge controls', () => {
     expect(result.current.edges).toEqual({ top: false, bottom: false });
     fireEvent.pointerMove(window, { clientY: 10 });
     expect(result.current.edges).toEqual({ top: true, bottom: false });
+    fireEvent.pointerMove(window, { clientX: window.innerWidth - 50, clientY: 95 });
+    expect(result.current.edges).toEqual({ top: true, bottom: false });
     fireEvent.pointerMove(window, { clientY: window.innerHeight - 10 });
     expect(result.current.edges).toEqual({ top: false, bottom: true });
     fireEvent.pointerMove(window, { clientY: window.innerHeight / 2 });

@@ -14,7 +14,10 @@ export function useImmersiveControls() {
       if (event.pointerType === 'touch') return;
       window.clearTimeout(timer.current);
       const target = event.target instanceof Element ? event.target : null;
-      const top = event.clientY < 72 || !!target?.closest('.explorer-header, .image-controls');
+      // Bridge the small gap beneath the title so the zoom buttons do not
+      // disappear while the pointer travels towards them.
+      const zoomBridge = event.clientX > window.innerWidth - 180 && event.clientY < 180;
+      const top = event.clientY < 72 || zoomBridge || !!target?.closest('.explorer-header, .image-controls');
       const bottom = event.clientY > window.innerHeight - 100 || !!target?.closest('.bottom-chrome, [data-slot="select-content"]');
       setEdges((previous) => previous.top === top && previous.bottom === bottom ? previous : { top, bottom });
     };
