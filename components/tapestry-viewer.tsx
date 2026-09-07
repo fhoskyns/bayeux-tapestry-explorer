@@ -195,6 +195,9 @@ export function TapestryViewer({
   const runtimeRef = useRef<typeof OpenSeadragonType | null>(null);
   const sourceKeyRef = useRef('');
   const openRequestRef = useRef(0);
+  const restoredViewportRef = useRef<ViewerViewport | null>(null);
+  const liveViewportRef = useRef<ViewerViewport | null>(null);
+  const exploringRef = useRef(false);
   const failedTilesRef = useRef(new Set<string>());
   const renderOverlaysRef = useRef<() => void>(() => undefined);
   const fitRef = useRef<() => void>(() => undefined);
@@ -292,19 +295,24 @@ export function TapestryViewer({
       const reportViewport = () => {
         if (!viewer || waitingForDrawRef.current) return;
         const viewport = viewportForViewer(viewer, contextRef.current);
-        if (viewport) contextRef.current.onViewportChange(viewport);
+        if (viewport) {
+          liveViewportRef.current = viewport;
+          contextRef.current.onViewportChange(viewport);
+        }
       };
 
       const reportExplore = () => {
         if (!viewer || waitingForDrawRef.current) return;
         const viewport = viewportForViewer(viewer, contextRef.current);
         if (!viewport) return;
+        exploringRef.current = true;
         contextRef.current.onExplore(clamp(viewport.x + viewport.width / 2));
       };
 
       viewer.addHandler('canvas-drag-end', reportExplore);
       viewer.addHandler('canvas-scroll', reportExplore);
       viewer.addHandler('canvas-pinch', reportExplore);
+      viewer.addHandler('canvas-double-click', reportExplore);
       viewer.addHandler('canvas-key', (event) => {
         const code = event.originalEvent?.code;
         if (viewer && !(viewer as PanAwareViewer).panVertical && code && ['ArrowUp', 'ArrowDown', 'KeyW', 'KeyS'].includes(code)) {
@@ -320,7 +328,12 @@ export function TapestryViewer({
           reportExplore();
         }
       });
-      viewer.addHandler('animation-finish', reportViewport);
+      viewer.addHandler('animation-finish', () => {
+        reportViewport();
+        // Input events fire before OSD applies motion. Reconcile again after
+        // keyboard, pinch, wheel or flick movement reaches its final position.
+        if (exploringRef.current || contextRef.current.mode === 'free') reportExplore();
+      });
       viewer.addHandler('after-resize', () => {
         window.cancelAnimationFrame(resizeFrame);
         resizeFrame = window.requestAnimationFrame(() => {
@@ -407,6 +420,8 @@ export function TapestryViewer({
 
     const sourceKey = dziUrl ?? (mode === 'overview' || !scene ? OVERVIEW_IMAGE : scene.imageUrl);
     const requestId = ++openRequestRef.current;
+    if (mode !== 'free') exploringRef.current = false;
+    if (!initialViewport) restoredViewportRef.current = null;
 
     const fitScene = () => {
       const currentContext = contextRef.current;
@@ -530,8 +545,13 @@ export function TapestryViewer({
         viewer.viewport.resize(new OpenSeadragon.Point(canvas.clientWidth, canvas.clientHeight), false);
       }
       const currentContext = contextRef.current;
-      if (currentContext.mode === 'free' && currentContext.initialViewport) {
-        restoreViewport(currentContext.initialViewport);
+      const requestedViewport = currentContext.initialViewport;
+      const freeViewport = requestedViewport && requestedViewport !== restoredViewportRef.current
+        ? requestedViewport
+        : liveViewportRef.current ?? requestedViewport;
+      if (currentContext.mode === 'free' && freeViewport) {
+        restoreViewport(freeViewport);
+        if (freeViewport === requestedViewport) restoredViewportRef.current = requestedViewport;
       } else {
         fitScene();
       }
@@ -541,7 +561,10 @@ export function TapestryViewer({
     };
 
     if (sourceKeyRef.current === sourceKey && viewer.isOpen() && !waitingForDrawRef.current) {
-      if (mode !== 'free') fitScene();
+      if (mode === 'free' && initialViewport && initialViewport !== restoredViewportRef.current) {
+        restoreViewport(initialViewport);
+        restoredViewportRef.current = initialViewport;
+      } else if (mode !== 'free') fitScene();
       renderOverlays();
       return;
     }
@@ -578,7 +601,7 @@ export function TapestryViewer({
             url: mode === 'overview' || !scene ? OVERVIEW_IMAGE : scene.imageUrl,
           },
     });
-  }, [dziUrl, mode, retryToken, scene, viewerGeneration]);
+  }, [dziUrl, initialViewport, mode, retryToken, scene, viewerGeneration]);
 
   useEffect(() => {
     renderOverlaysRef.current();
@@ -599,6 +622,7 @@ export function TapestryViewer({
   const zoom = useCallback((factor: number) => {
     const viewer = viewerRef.current;
     if (!viewer?.viewport) return;
+    exploringRef.current = true;
     viewer.viewport.zoomBy(factor, undefined, contextRef.current.reduceMotion).applyConstraints(
       contextRef.current.reduceMotion,
     );

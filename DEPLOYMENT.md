@@ -1,14 +1,15 @@
 # Deployment and release runbook
 
-Production promotion is deliberately gated. Build previews from a non-production branch or with the Vercel CLI, but do not connect the public Deep Zoom source or production alias until every item in [PROVENANCE.md](./PROVENANCE.md) is evidenced and `pnpm release:check` passes.
+Production promotion is deliberately gated. The owner explicitly authorized R2 activation and connecting the verified full panorama to the editorial preview on 7 September 2026, relying on the selected Commons reproduction despite the recorded source-terms conflict. This permits technical preview testing; it is not museum permission, scholarly approval, or a waiver of the production gate. Do not connect the production alias until every item in [PROVENANCE.md](./PROVENANCE.md) is evidenced and `pnpm release:check` passes.
 
-## Provisioning status — 5 September 2026
+## Provisioning status — 7 September 2026
 
 - The public [GitHub repository](https://github.com/fhoskyns/bayeux-tapestry-explorer) exists with `main`; both application and tile-infrastructure CI jobs pass.
 - The Vercel Hobby project `bayeux-tapestry-explorer` exists in `fhoskyns-projects`, with system environment variables exposed and deployment protection enabled. Its GitHub app connection is confirmed and the production branch is `main`; `preview/initial-review` is the non-production review branch.
 - Vercel classified the first CLI deployment as Production despite `--target preview`. The production guard correctly stopped its build; no website was promoted. Keep this guard intact and verify the actual deployment target before treating a deployment as a preview. Do not work around this with an environment override or an unchecked prebuilt upload.
 - `.vercelignore` explicitly excludes local environments, generated imagery, dependencies, and build artifacts. Git exclusions alone must not be relied on for CLI deployment packaging. The corrected source upload was approximately 769 KB, not the 3 GB tile pyramid.
-- The complete local pyramid is verified and its report is committed. Cloudflare authentication is connected, but R2 activation is still required before the storage buckets can be created. No Cloudflare buckets or Worker have been deployed.
+- R2 is active. The three Standard-storage buckets below exist, with public bucket URLs disabled. The read-only Worker is deployed at `https://bayeux-tiles.bayeux-tapestry-deepzoom-infrastructure.workers.dev`; its only deployed binding is the derivative bucket. All 3,900 derivative objects passed exhaustive HTTPS read-back verification on 7 September 2026; see [remote evidence](./release-evidence/deepzoom-v1-remote-verification.json). The Preview-only tile origin is scoped to `preview/initial-review`; Production remains unset.
+- The untouched master archival transfer is separate and resumable. Do not treat the existence of the archive bucket or an in-progress multipart upload as a completed backup; require a full read-back SHA-256 report before marking that archival step complete.
 
 ## 1. GitHub and Vercel preview
 
@@ -29,9 +30,9 @@ In the Vercel project settings, enable **Automatically expose System Environment
 
 Use three physically separate R2 buckets:
 
-1. `bayeux-tapestry-archive` — private untouched master under `private/v1/`; never bind this bucket to a Worker.
+1. `bayeux-tapestry-archive` — private untouched master under `private/v1/<source-sha256>/`; never bind this bucket to a deployed application or public Worker. An operator-only authenticated Wrangler remote-binding session can perform a resumable multipart archive upload, and must be disposed afterwards.
 2. `bayeux-tapestry-derivatives` — only the verified public `v1/` DZI descriptor and tiles.
-3. `bayeux-tapestry-derivatives-preview` — non-production derivatives used by Wrangler preview sessions.
+3. `bayeux-tapestry-derivatives-preview` — empty unless a Wrangler preview session specifically needs independent test assets; do not duplicate the full pyramid here.
 
 Before any upload, independently compare the source delivery with `infrastructure/deepzoom/source-lock.json`. Upload the master only after the project records a documented basis for retaining it. Upload only the verified `generated/v1/` tree to the public derivative bucket; never upload the report, source lock, staging directories, logs, or source image there.
 
@@ -53,10 +54,10 @@ After the committed report has been independently reviewed, set `image.dziVerifi
 
 ## 4. Production connection
 
-After `pnpm release:check` passes, set the Vercel build variable in Preview and Production:
+For the owner-authorized technical preview, set the following only in Preview, scoped to `preview/initial-review`, after full local and remote tile verification. Production must remain unset until `pnpm release:check` passes:
 
 ```text
-VITE_TAPESTRY_TILE_BASE_URL=https://bayeux-tiles.<account>.workers.dev/v1
+VITE_TAPESTRY_TILE_BASE_URL=https://bayeux-tiles.bayeux-tapestry-deepzoom-infrastructure.workers.dev/v1
 ```
 
 Push the release candidate to a non-production branch and use its commit-specific Vercel Preview URL to exercise overview, all scene transitions, free exploration, URL restoration, annotations, keyboard navigation, reduced motion, and HTTP smoke checks. Merge that exact reviewed commit into `main` only after the candidate passes. Vercel then reruns the production guard and static build for the production deployment from `main`; immediately repeat the HTTP smoke checks against `bayeux-tapestry-explorer.vercel.app` and roll back if they fail.

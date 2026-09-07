@@ -12,9 +12,11 @@ The master image is not stored in Git and must never be served by the tile Worke
 
 ## Current preview
 
-The complete `v1` DZI pyramid passed the full-pixel verifier on 5 September 2026. Its [tracked report](./release-evidence/deepzoom-v1-verification.json) matches the source lock and records 3,899 lossless WebP tiles across levels 0–19, 6,816 checked seams, and pixel equality against the locked master for all 2,826 native-resolution tiles. The tiles total 3,065,956,662 bytes. This proves faithful derivation from the locked digital file, not identity with the physical object or authority to publish it.
+The complete `v1` DZI pyramid passed a fresh full-pixel verification on 7 September 2026 (London time). Its [tracked report](./release-evidence/deepzoom-v1-verification.json) matches the source lock and records 3,899 lossless WebP tiles across levels 0–19, 6,816 checked seams, and pixel equality against the locked master for all 2,826 native-resolution tiles. The tiles total 3,065,956,662 bytes. This proves faithful derivation from the locked digital file, not identity with the physical object or authority to publish it.
 
-Until the verified pyramid is deployed and `VITE_TAPESTRY_TILE_BASE_URL` is configured, the application displays resized Wikimedia Commons overview and scene images. Those preview assets are not represented as pixel-identical native-resolution tiles.
+On 7 September 2026, all 3,900 hosted derivative objects passed a full HTTPS read-back through the read-only Cloudflare Worker: exact SHA-256 and byte lengths, expected MIME, public CORS, and immutable caching headers. The [remote verification report](./release-evidence/deepzoom-v1-remote-verification.json) records 3,065,956,871 total bytes including the DZI descriptor. Only the `preview/initial-review` Vercel environment is connected to this host. Without `VITE_TAPESTRY_TILE_BASE_URL`, the application still falls back to resized Wikimedia Commons overview and scene images, which are not represented as pixel-identical native-resolution tiles.
+
+The owner activated R2 and authorized full-panorama preview delivery on 7 September 2026, explicitly proceeding with the selected Commons scan despite its public-domain marking conflicting with museum source terms. This records the operator's preview decision only: formal permission and production publication review remain unresolved. The untouched archive and public derivative tiles occupy separate private R2 buckets; only the derivative bucket is bound to the deployed read-only Worker.
 
 Scene bounds are proportional estimates derived from the widths of separate museum-numbered scene images. Hotspot positions are editorial placement hints. Both require calibration against the final master.
 

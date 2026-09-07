@@ -322,4 +322,68 @@ describe('real tapestry viewer', () => {
     expect(props.onExplore).toHaveBeenCalledOnce();
   });
 
+  it('restores history viewports on an already-open panorama without refitting subsequent free pans', async () => {
+    const props = { ...viewerProps(), dziUrl: 'https://tiles.example/v1/tapestry.dzi' };
+    const first = { x: 0.2, y: 0, width: 0.02, height: 1 };
+    const second = { x: 0.5, y: 0.2, width: 0.01, height: 0.5 };
+    const view = render(<TapestryViewer {...props} mode="free" initialViewport={first} />);
+    const viewer = await initializedViewer();
+    act(() => { viewer.emit('open'); viewer.emit('update-viewport'); });
+    viewer.viewport.fitBounds.mockClear();
+
+    view.rerender(<TapestryViewer {...props} mode="free" initialViewport={second} />);
+    expect(viewer.viewport.fitBounds).toHaveBeenCalledExactlyOnceWith({
+      x: second.x * 3840, y: second.y * 2160,
+      width: second.width * 3840, height: second.height * 2160,
+    }, true);
+    viewer.viewport.fitBounds.mockClear();
+    view.rerender(<TapestryViewer {...props} mode="free" initialViewport={second} scene={tapestryManifest.scenes[31]} />);
+    expect(viewer.viewport.fitBounds).not.toHaveBeenCalled();
+    expect(viewer.open).toHaveBeenCalledOnce();
+  });
+
+  it('reports the final position after keyboard or flick motion and preserves the continuous source', async () => {
+    const props = { ...viewerProps(), dziUrl: 'https://tiles.example/v1/tapestry.dzi' };
+    const view = render(<TapestryViewer {...props} />);
+    const viewer = await initializedViewer();
+    act(() => { viewer.emit('open'); viewer.emit('update-viewport'); });
+    act(() => viewer.emit('canvas-key', { originalEvent: { code: 'ArrowRight' } }));
+    viewer.imageBounds = { x: 1920, y: 0, width: 384, height: 2160 };
+    act(() => viewer.emit('animation-finish'));
+    expect(props.onExplore).toHaveBeenLastCalledWith(0.55);
+    viewer.viewport.fitBounds.mockClear();
+    view.rerender(<TapestryViewer {...props} mode="free" scene={tapestryManifest.scenes[31]} />);
+    expect(viewer.open).toHaveBeenCalledOnce();
+    expect(viewer.viewport.fitBounds).not.toHaveBeenCalled();
+  });
+
+  it('preserves the current free viewport on retry instead of replaying the original shared link', async () => {
+    const props = { ...viewerProps(), dziUrl: 'https://tiles.example/v1/tapestry.dzi' };
+    const initialViewport = {x:0.1,y:0,width:0.02,height:1};
+    const view = render(<TapestryViewer {...props} mode="free" initialViewport={initialViewport} />);
+    const viewer = await initializedViewer();
+    act(() => { viewer.emit('open'); viewer.emit('update-viewport'); });
+    viewer.imageBounds = { x:1920, y:432, width:384, height:1080 };
+    act(() => viewer.emit('animation-finish'));
+    act(() => viewer.emit('tile-load-failed', {tile:failedTile,maxReached:true}));
+    viewer.viewport.fitBounds.mockClear();
+    fireEvent.click(screen.getByRole('button', {name:/retry image/i}));
+    act(() => { viewer.emit('open'); viewer.emit('update-viewport'); });
+    expect(viewer.viewport.fitBounds).toHaveBeenCalledExactlyOnceWith(viewer.imageBounds, true);
+    viewer.viewport.fitBounds.mockClear();
+    view.rerender(<TapestryViewer {...props} mode="free" initialViewport={initialViewport} scene={tapestryManifest.scenes[31]} />);
+    expect(viewer.viewport.fitBounds).not.toHaveBeenCalled();
+  });
+
+  it('enters free exploration after double-click or double-tap zoom', async () => {
+    const props = viewerProps();
+    render(<TapestryViewer {...props} />);
+    const viewer = await initializedViewer();
+    act(() => { viewer.emit('open'); viewer.emit('update-viewport'); });
+    act(() => viewer.emit('canvas-double-click'));
+    expect(props.onExplore).toHaveBeenCalledOnce();
+    act(() => viewer.emit('animation-finish'));
+    expect(props.onExplore).toHaveBeenCalledTimes(2);
+  });
+
 });

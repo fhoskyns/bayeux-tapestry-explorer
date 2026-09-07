@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { composeDziUrl, TapestryExplorer } from '@/components/tapestry-explorer';
+import { composeDziUrl, nearestScene, TapestryExplorer } from '@/components/tapestry-explorer';
 import { tapestryManifest } from '@/data/tapestry-manifest';
 import SourcesPage from '@/app/sources/page';
 import { ARRIVAL_DURATION, ARRIVAL_PREFERENCE, TapestryArrival } from '@/components/tapestry-arrival';
@@ -57,6 +57,7 @@ function mockMotion(matches = false) {
 
 describe('guided tour interactions', () => {
   beforeEach(() => {
+    vi.unstubAllEnvs();
     window.history.replaceState(null, '', '/');
     window.localStorage.setItem(ARRIVAL_PREFERENCE, '1');
     mockMotion();
@@ -71,6 +72,28 @@ describe('guided tour interactions', () => {
     expect(composeDziUrl('https://bayeux-tiles.example.workers.dev', path)).toBe(
       'https://bayeux-tiles.example.workers.dev/v1/bayeux-tapestry/bayeux-tapestry.dzi',
     );
+  });
+
+  it('uses the containing scene, including uneven divisions and the final edge', () => {
+    const scenes = tapestryManifest.scenes;
+    for (const scene of scenes) {
+      for (const offset of [0, scene.pixelBounds.width - 0.01]) {
+        expect(nearestScene(scenes, (scene.pixelBounds.x + offset) / 482096).id).toBe(scene.id);
+      }
+    }
+    expect(nearestScene(scenes, 1).id).toBe('58');
+  });
+
+  it('clears a pinned note when continuous exploration enters another scene', () => {
+    vi.stubEnv('VITE_TAPESTRY_TILE_BASE_URL', 'https://tiles.example/v1');
+    const note = tapestryManifest.scenes[0].annotations[0];
+    window.history.replaceState(null, '', `/?scene=01&annotation=${note.id}`);
+    render(<TapestryExplorer manifest={tapestryManifest} />);
+    expect(screen.getByText(note.commentary)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Simulate a pan' }));
+    expect(screen.queryByText(note.commentary)).not.toBeInTheDocument();
+    expect(new URLSearchParams(window.location.search).has('annotation')).toBe(false);
+    expect(screen.getByTestId('mock-viewer')).toHaveAttribute('data-mode', 'free');
   });
 
   it('plays the first-visit opening, lets visitors skip, and never replays from Home', async () => {

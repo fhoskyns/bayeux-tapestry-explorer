@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "result": "pass",
+  "verifiedAt": "2026-09-07T20:11:08.190Z",
+  "origin": "https://bayeux-tiles.bayeux-tapestry-deepzoom-infrastructure.workers.dev",
+  "objectCount": 3900,
+  "tileCount": 3899,
+  "bytes": 3065956871,
+  "sourceSha256": "dc6717cc882a42984d328a58021b7d97a081ce0c0549c35057c34e1d16eca6b5",
+  "method": "HTTPS GET and SHA-256 comparison for every derivative object; CORS, immutable caching and MIME checked on each response",
+  "inventorySha256": "793d53a3099355f46eae891ab85d6f20b44af0ec17d77f08f19938fd06a7462a"
+}

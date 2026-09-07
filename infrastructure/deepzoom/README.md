@@ -49,7 +49,7 @@ Commit the resulting `pnpm-lock.yaml` when this bundle is incorporated into the 
 Keep the source outside the repository and outside the generated output tree. Inspect it:
 
 ```sh
-pnpm inspect-source -- \
+pnpm inspect-source \
   --source /secure/museum-delivery/bayeux-approved-publication.tif \
   --asset-id bayeux-tapestry
 ```
@@ -63,7 +63,7 @@ Do not store the original path in the lock or verification report. The scripts r
 Choose a new, empty output root and run:
 
 ```sh
-pnpm generate -- \
+pnpm generate \
   --source /secure/museum-delivery/bayeux-approved-publication.tif \
   --lock ./source-lock.json \
   --output ./generated
@@ -78,7 +78,7 @@ The script disables Sharp’s normal input-pixel ceiling because an approved tap
 Run the full verifier again in a clean build job or on another machine with the same locked toolchain:
 
 ```sh
-pnpm verify -- \
+pnpm verify \
   --source /secure/museum-delivery/bayeux-approved-publication.tif \
   --lock ./source-lock.json \
   --pyramid ./generated/v1/bayeux-tapestry \

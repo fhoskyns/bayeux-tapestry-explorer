@@ -6,7 +6,7 @@ An English-first, non-commercial interactive exploration of the complete survivi
 
 This repository is an **editorial and technical preview**, not a production publication. It contains all 58 modern museum scene divisions and 116 draft notes, but every transcription, translation, citation locator, scene boundary, and hotspot position still requires specialist review. The release check is designed to fail until that evidence exists.
 
-The complete lossless Deep Zoom pyramid passed full verification on 5 September 2026: 3,899 tiles, 6,816 seams, and pixel equality against the locked master for all 2,826 native-resolution tiles. The compact [verification report](./release-evidence/deepzoom-v1-verification.json) is tracked; imagery remains outside Git. This technical result does not constitute editorial approval or publication clearance.
+The complete lossless Deep Zoom pyramid passed a fresh full verification on 7 September 2026 (London time): 3,899 tiles, 6,816 seams, and pixel equality against the locked master for all 2,826 native-resolution tiles. All 3,900 hosted objects (tiles plus DZI) also passed an exhaustive read-back SHA-256 check through the Cloudflare Worker. Both the [pixel verification](./release-evidence/deepzoom-v1-verification.json) and [hosted delivery verification](./release-evidence/deepzoom-v1-remote-verification.json) reports are tracked; imagery remains outside Git. This technical result does not constitute editorial approval or publication clearance.
 
 ## Experience
 
@@ -29,7 +29,7 @@ pnpm dev
 ```
 
 Without `VITE_TAPESTRY_TILE_BASE_URL`, the app deliberately uses resized Wikimedia Commons preview imagery. No credential is ever exposed to the browser.
-Preview dragging is within the selected source image. Continuous panning across the entire original requires the configured Deep Zoom host; separate preview photographs are never stitched together as a purported accurate facsimile.
+Without that configuration, dragging is within the selected source image. The `preview/initial-review` Vercel environment now uses the verified Deep Zoom host for continuous panning across the entire original. Separate fallback photographs are never stitched together as a purported accurate facsimile.
 
 ## Checks
 
@@ -55,7 +55,7 @@ See [PROVENANCE.md](./PROVENANCE.md), [DEPLOYMENT.md](./DEPLOYMENT.md), and [inf
 - Static React/Vinext export on Vercel.
 - Lossless versioned DZI derivatives in a public-derivative-only Cloudflare R2 bucket.
 - A read-only Cloudflare Worker that accepts only canonical `GET` and `HEAD` paths under `/v1/`.
-- A physically separate private archive bucket for the untouched master, with no Worker binding.
+- A physically separate private archive bucket for the untouched master, with no deployed Worker binding or public URL.
 - No database, authentication, analytics, advertising, cookies, or application API.
 
 ## Corrections and rights concerns

@@ -55,8 +55,13 @@ function validViewport(params: URLSearchParams): ViewerViewport | null {
   return { x, y, width, height };
 }
 
-function nearestScene(scenes: Scene[], fraction: number) {
-  const pixel = fraction * MASTER_WIDTH;
+export function nearestScene(scenes: Scene[], fraction: number) {
+  // Stabilize exact integer boundaries after normalized-coordinate round trips.
+  const pixel = Math.round(fraction * MASTER_WIDTH * 1e6) / 1e6;
+  const containing = scenes.find(({ pixelBounds }) =>
+    pixel >= pixelBounds.x && pixel < pixelBounds.x + pixelBounds.width,
+  );
+  if (containing) return containing;
   return scenes.reduce((nearest, scene) => {
     const center = scene.pixelBounds.x + scene.pixelBounds.width / 2;
     const nearestCenter = nearest.pixelBounds.x + nearest.pixelBounds.width / 2;
@@ -388,7 +393,13 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
 
   const enterFreeExploration = useCallback((centerFraction: number) => {
     if (mode === 'overview') return;
-    if (dziUrl) setSceneId(nearestScene(scenes, centerFraction).id);
+    if (dziUrl) {
+      const nextScene = nearestScene(scenes, centerFraction);
+      setSceneId(nextScene.id);
+      setActiveAnnotation((current) =>
+        current && nextScene.annotations.some((note) => note.id === current.id) ? current : null,
+      );
+    }
     setMode('free');
   }, [dziUrl, mode, scenes]);
 
