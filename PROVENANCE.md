@@ -18,6 +18,8 @@ On 7 September 2026, all 3,900 hosted derivative objects passed a full HTTPS rea
 
 The owner activated R2 and authorized full-panorama preview delivery on 7 September 2026, explicitly proceeding with the selected Commons scan despite its public-domain marking conflicting with museum source terms. This records the operator's preview decision only: formal permission and production publication review remain unresolved. The untouched archive and public derivative tiles occupy separate private R2 buckets; only the derivative bucket is bound to the deployed read-only Worker.
 
+The private master archival copy passed a complete read-back SHA-256 check on 7 September 2026, matching the original 3,678,791,445-byte PNG. The [archive verification report](./release-evidence/master-v1-archive-verification.json) contains only non-secret object metadata, not the image or credentials. The archive has no public bucket URL or deployed serving Worker. Master plus derivative objects total 6,744,748,316 bytes; this is fixed asset storage, not a guarantee against request-related usage charges.
+
 Scene bounds are proportional estimates derived from the widths of separate museum-numbered scene images. Hotspot positions are editorial placement hints. Both require calibration against the final master.
 
 ## Credit and rights notices

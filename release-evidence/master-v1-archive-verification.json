@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "result": "pass",
+  "verifiedAt": "2026-09-07T20:21:30.996Z",
+  "bucket": "bayeux-tapestry-archive",
+  "key": "private/v1/dc6717cc882a42984d328a58021b7d97a081ce0c0549c35057c34e1d16eca6b5/Tapisserie_de_Bayeux.png",
+  "bytes": 3678791445,
+  "sha256": "dc6717cc882a42984d328a58021b7d97a081ce0c0549c35057c34e1d16eca6b5",
+  "method": "Authenticated multipart upload; complete ranged read-back SHA-256; no public bucket URL or deployed archive-serving Worker"
+}

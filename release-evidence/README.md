@@ -2,6 +2,10 @@
 
 This tracked directory is the handoff point for compact, non-secret evidence required by production builds. Generated tiles and staging data remain outside Git.
 
+The [7 September preview record](./preview-2026-09-07.md) identifies the exact tested deployment, CI run, HTTP checks and browser checks. The [remote delivery report](./deepzoom-v1-remote-verification.json) records a complete HTTPS/SHA-256 read-back of all 3,900 derivative objects. These supplement the full-pixel report; neither grants publication or editorial approval. The automated release gate currently parses the full-pixel report described below; remote deployment evidence still requires operator review.
+
+The [private master archive report](./master-v1-archive-verification.json) records a full read-back hash of the untouched PNG in its separate private bucket. It contains no private local path, upload ID, or credential; it does not make the archival object publicly readable.
+
 After the locked master and the complete DZI pyramid have passed the independent full-pixel verifier, copy the successful report from:
 
 ```text
