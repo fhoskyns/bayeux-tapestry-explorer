@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { selectorCenter, type Annotation, type Scene } from '@/lib/tapestry-schema';
 import { annotationLabel } from '@/lib/annotation-label';
 import type { AutoPanSpeed } from '@/lib/auto-pan';
+import { positionAnnotationPreview, updateAutoPreview } from '@/lib/auto-preview';
 
 const MASTER_WIDTH = 482096;
 const OVERVIEW_IMAGE =
@@ -28,6 +29,8 @@ type TapestryViewerProps = {
   onAutoPanPause?: () => void;
   activeAnnotationId?: string;
   initialViewport?: ViewerViewport | null;
+  cameraRequest?: ViewerViewport | null;
+  onCameraChange?: (camera: ViewerViewport) => void;
   mode: ViewerMode;
   scene: Scene | null;
   dziUrl?: string;
@@ -54,6 +57,7 @@ type ViewerContext = Pick<
   | 'onImmersiveChange'
   | 'onAutoPanPause'
   | 'onViewportChange'
+  | 'onCameraChange'
   | 'reduceMotion'
   | 'scene'
 >;
@@ -105,7 +109,7 @@ function stopViewerGesture(event: Event) {
   event.stopPropagation();
 }
 
-function createMarker(
+export function createMarker(
   annotation: Annotation,
   index: number,
   active: boolean,
@@ -144,17 +148,7 @@ function createMarker(
   marker.appendChild(dot);
   marker.appendChild(preview);
 
-  const positionPreview = () => {
-    const surface = marker.closest('[data-viewer-canvas="true"]');
-    if (!surface) return;
-    const available = surface.getBoundingClientRect();
-    const anchor = marker.getBoundingClientRect();
-    const halfWidth = preview.offsetWidth / 2;
-    const centerX = anchor.left + anchor.width / 2;
-    marker.classList.toggle('annotation-marker--below', anchor.top - available.top < preview.offsetHeight + 16);
-    marker.classList.toggle('annotation-marker--edge-left', centerX - available.left < halfWidth + 12);
-    marker.classList.toggle('annotation-marker--edge-right', available.right - centerX < halfWidth + 12);
-  };
+  const positionPreview = () => positionAnnotationPreview(marker);
   marker.addEventListener('mouseenter', positionPreview);
   marker.addEventListener('focus', positionPreview);
 
@@ -173,6 +167,7 @@ function createMarker(
 function viewportForViewer(
   viewer: OpenSeadragonType.Viewer,
   context: ViewerContext,
+  normalized = true,
 ): ViewerViewport | null {
   const item = viewer.world.getItemAt(0);
   if (!viewer.viewport || !item) return null;
@@ -187,7 +182,7 @@ function viewportForViewer(
   };
 
   if (context.dziUrl || !context.scene || context.mode === 'overview') {
-    return normalizeViewport(local);
+    return normalized ? normalizeViewport(local) : local;
   }
 
   return normalizeViewport({
@@ -204,6 +199,8 @@ export function TapestryViewer({
   onAutoPanPause,
   activeAnnotationId,
   initialViewport,
+  cameraRequest,
+  onCameraChange,
   mode,
   scene,
   dziUrl,
@@ -252,6 +249,7 @@ export function TapestryViewer({
     onImmersiveChange,
     onAutoPanPause,
     onViewportChange,
+    onCameraChange,
     reduceMotion,
     scene,
   });
@@ -274,6 +272,7 @@ export function TapestryViewer({
       onImmersiveChange,
       onAutoPanPause,
       onViewportChange,
+      onCameraChange,
       reduceMotion,
       scene,
     };
@@ -290,6 +289,7 @@ export function TapestryViewer({
     onImmersiveChange,
     onAutoPanPause,
     onViewportChange,
+    onCameraChange,
     reduceMotion,
     scene,
   ]);
@@ -438,6 +438,8 @@ export function TapestryViewer({
             spring.resetTo(centerY);
           }
         }
+        const camera = viewportForViewer(viewer, contextRef.current, false);
+        if (camera) contextRef.current.onCameraChange?.(camera);
       });
       viewer.addHandler('update-viewport', () => {
         const item = viewer?.world.getItemAt(0);
@@ -705,8 +707,24 @@ export function TapestryViewer({
 
   useEffect(() => {
     const viewer = viewerRef.current;
+    const item = viewer?.world.getItemAt(0);
+    if (!cameraRequest || !viewer?.viewport || !item || !dziUrl) return;
+    const dimensions = item.getContentSize();
+    exploringRef.current = true;
+    relaxingRef.current = false;
+    contextAnchorRef.current = cameraRequest.height > 1 / 0.84
+      ? clamp((0.5 - cameraRequest.y) / cameraRequest.height, 0.1, 0.9) : null;
+    viewer.viewport.fitBounds(item.imageToViewportRectangle(
+      cameraRequest.x * dimensions.x, cameraRequest.y * dimensions.y,
+      cameraRequest.width * dimensions.x, cameraRequest.height * dimensions.y,
+    ), true);
+  }, [cameraRequest, dziUrl, viewerGeneration]);
+
+  useEffect(() => {
+    const viewer = viewerRef.current;
     const OpenSeadragon = runtimeRef.current;
     if (!autoPan || !viewer || !OpenSeadragon) return;
+    const surface = elementRef.current;
     let frame = 0;
     let previousTime: number | null = null;
     let reportedAt = -Infinity;
@@ -751,10 +769,16 @@ export function TapestryViewer({
       }
       frame = window.requestAnimationFrame(step);
     };
+    const updatePreviews = () => {
+      if (surface) updateAutoPreview(surface, !waitingForDrawRef.current && !contextRef.current.activeAnnotationId && contextRef.current.mode !== 'overview');
+    };
+    viewer.addHandler('update-viewport', updatePreviews);
     frame = window.requestAnimationFrame(step);
     return () => {
       cancelled = true;
       window.cancelAnimationFrame(frame);
+      viewer.removeHandler('update-viewport', updatePreviews);
+      if (surface) updateAutoPreview(surface, false);
     };
   }, [autoPan, viewerGeneration]);
 
@@ -783,7 +807,7 @@ export function TapestryViewer({
     if (viewport) contextRef.current.onExplore(clamp(viewport.x + viewport.width / 2));
   }, []);
 
-  const leaveImmersion = useCallback(() => {
+  const leaveImmersion = useCallback((restoreFocus = true) => {
     contextRef.current.onAutoPanPause?.();
     const viewer = viewerRef.current;
     const OpenSeadragon = runtimeRef.current;
@@ -811,15 +835,15 @@ export function TapestryViewer({
       contextRef.current.reduceMotion,
     );
     // The X disappears after activation; keep keyboard focus somewhere useful.
-    stage?.querySelector<HTMLButtonElement>('.home-button')?.focus({ preventScroll: true });
+    if (restoreFocus) stage?.querySelector<HTMLButtonElement>('.home-button')?.focus({ preventScroll: true });
   }, []);
 
-  useEffect(() => { relaxRef.current = leaveImmersion; }, [leaveImmersion]);
+  useEffect(() => { relaxRef.current = () => leaveImmersion(false); }, [leaveImmersion]);
 
   return (
     <div className="tapestry-canvas-wrap" aria-busy={loading}>
       {immersive && mode !== 'overview' ? (
-        <button aria-label="Leave close-up — show title and navigation" className="exit-closeup" onClick={leaveImmersion} type="button">
+        <button aria-label="Leave close-up — show title and navigation" className="exit-closeup" onClick={() => leaveImmersion()} type="button">
           <X aria-hidden="true" />
         </button>
       ) : null}

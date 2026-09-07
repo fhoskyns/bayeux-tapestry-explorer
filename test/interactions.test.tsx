@@ -80,6 +80,18 @@ describe('guided tour interactions', () => {
     );
   });
 
+  it('keeps editorial status on Sources rather than the viewing footer, and removes competing dialog translations', async () => {
+    window.history.replaceState(null, '', '/?scene=07');
+    render(<TapestryExplorer manifest={tapestryManifest} />);
+    expect(screen.queryByText('Editorial preview · notes awaiting review')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Read this scene' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog.className).not.toContain('-translate-x-1/2');
+    expect(dialog.className).not.toContain('-translate-y-1/2');
+    expect(dialog).toHaveClass('translate-x-0', 'translate-y-0');
+    expect(screen.getByText('Project translation — draft, awaiting review.')).toBeInTheDocument();
+  });
+
   it('keeps auto-pan off by default, starts at scene 01 when enabled, and permits switching off', () => {
     render(<TapestryExplorer manifest={tapestryManifest} />);
     const toggle = screen.getByRole('button', { name: 'Play auto-pan' });

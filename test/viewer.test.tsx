@@ -57,6 +57,9 @@ const osd = vi.hoisted(() => {
     addHandler(name: string, callback: Handler['callback']) {
       this.handlers.set(name, [...(this.handlers.get(name) ?? []), { callback, once: false }]);
     }
+    removeHandler(name: string, callback: Handler['callback']) {
+      this.handlers.set(name, (this.handlers.get(name) ?? []).filter((handler) => handler.callback !== callback));
+    }
     addOnceHandler(name: string, callback: Handler['callback']) {
       this.handlers.set(name, [...(this.handlers.get(name) ?? []), { callback, once: true }]);
     }

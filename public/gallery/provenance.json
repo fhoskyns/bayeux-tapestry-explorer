@@ -1,0 +1,122 @@
+{
+  "asset": "bayeux-gallery.glb",
+  "sha256": "672d699ab6db12d76edccdafc78a1463b6e4718262419167f464510386191068",
+  "bytes": 124920,
+  "sourceBlend": "../output/bayeux-display-study.blend",
+  "sourceBlendSha256": "94b805aa426ce3979b0c2d7c2a25f91a65cbf5b9863218674efdda6386ea0657",
+  "sourceSoftware": "4.5.13 LTS",
+  "status": "Conceptual installation based on the approved Blender study, not a surveyed British Museum reconstruction.",
+  "included": [
+    "pale floor and walls",
+    "benches",
+    "case base and support",
+    "dark frames",
+    "minimal glazing"
+  ],
+  "excluded": [
+    "all embroidery planes",
+    "all source textures",
+    "camera",
+    "lights",
+    "caption and title text"
+  ],
+  "originalMeshCount": 131,
+  "exportedMeshGroups": [
+    {
+      "node": "Gallery / Pale limestone floor",
+      "material": "Pale limestone floor",
+      "triangles": 552
+    },
+    {
+      "node": "Gallery / Floor joint",
+      "material": "Floor joint",
+      "triangles": 300
+    },
+    {
+      "node": "Gallery / Warm chalk plaster",
+      "material": "Warm chalk plaster",
+      "triangles": 576
+    },
+    {
+      "node": "Gallery / Charcoal case base",
+      "material": "Charcoal case base",
+      "triangles": 108
+    },
+    {
+      "node": "Gallery / Dark anodised frame",
+      "material": "Dark anodised frame",
+      "triangles": 816
+    },
+    {
+      "node": "Gallery / Conservation support",
+      "material": "Conservation support",
+      "triangles": 12
+    },
+    {
+      "node": "Gallery / Gallery / minimal glazing",
+      "material": "Gallery / minimal glazing",
+      "triangles": 264
+    }
+  ],
+  "coordinateSystem": {
+    "units": "metres",
+    "blender": "right-handed, Z up",
+    "gltf": "right-handed, Y up",
+    "blenderToGltf": "[x, y, z] -> [x, z, -y]"
+  },
+  "textileRectangle": {
+    "sourcePixels": [
+      482096,
+      5550
+    ],
+    "lengthMeters": 70,
+    "depthMeters": 0.8058560950516079,
+    "surfaceHeightMeters": 0.981,
+    "note": "Uniformly scaled complete scan including backing margins; depth is not the historic textile width.",
+    "gltfTopLeft": [
+      -35,
+      0.981,
+      -0.40292804752580397
+    ],
+    "gltfTopRight": [
+      35,
+      0.981,
+      -0.40292804752580397
+    ],
+    "gltfBottomLeft": [
+      -35,
+      0.981,
+      0.40292804752580397
+    ],
+    "gltfBottomRight": [
+      35,
+      0.981,
+      0.40292804752580397
+    ],
+    "gltfNormal": [
+      0,
+      1,
+      0
+    ],
+    "imageToGltf": "For image u,v in [0,1], with v=0 at the image top: [70*(u-0.5), 0.981, depthMeters*(v-0.5)].",
+    "gltfToImage": "u=x/70+0.5; v=z/depthMeters+0.5.",
+    "topDownCameraUp": [
+      0,
+      0,
+      -1
+    ],
+    "supportTopHeightMeters": 0.979
+  },
+  "browserMaterials": {
+    "glazingMaterial": "Gallery / minimal glazing",
+    "glazingAlpha": 0.045,
+    "suggestedGlazingDepthWrite": false,
+    "lighting": "No lights exported. Root supplies browser lighting and photographic textile material.",
+    "texturePolicy": "No textures or UV attributes exported; actual imagery comes from the existing verified DZI service."
+  },
+  "provenance": {
+    "approvedStudy": "../README.md",
+    "exhibitionDesignerReference": "https://opera-amsterdam.nl/2026-british-museum-bayeux-tapestry",
+    "museumExhibition": "https://www.britishmuseum.org/exhibitions/bayeux-tapestry"
+  }
+}

@@ -19,6 +19,8 @@ The complete lossless Deep Zoom pyramid passed a fresh full verification on 7 Se
 - An Auto-pan dial offers four speeds: Slow (14), Gentle (28, default), Steady (56), and Brisk (84 screen pixels per second). A separate borderless play/pause button starts or stops movement; selecting a notch alone never starts playback. Manual navigation, note reading and the surviving ending pause it. It does not start automatically, including in shared URLs; hidden tabs suspend movement.
 - A complete-strip navigator with hover magnification, click-to-jump, viewport indication, and an accessible scene selector.
 - Chapter-labelled, keyboard-accessible annotation markers (1a, 1b, 2a…), a desktop evidence panel, a mobile bottom panel, Latin tituli, draft project translations, and direct source links.
+- Auto-pan opens one annotation preview at a time as it passes the centre; manual hover/focus takes priority. The four-speed playback control stays at the right in close-up.
+- An optional, lazily loaded **Gallery / Bird’s-eye** switch. The live 3D gallery supports dragging along the case, wheel/pinch zoom, Shift/right-drag orbit and keyboard controls. Switching back rises over the same image coordinates. The case is a conceptual Blender study—not an official or measured museum reconstruction. See [gallery implementation and provenance](./docs/gallery.md).
 
 ## Local development
 

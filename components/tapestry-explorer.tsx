@@ -10,15 +10,15 @@ import {
   Compass,
   Copy,
   House,
-  Pause,
-  Play,
   X,
 } from 'lucide-react';
 import Image from 'next/image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Slider } from '@/components/ui/slider';
+import { AutoPanControl } from '@/components/auto-pan-control';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { TapestryGallery } from '@/components/tapestry-gallery';
 import { Dialog, DialogClose, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { TapestryViewer, type ViewerViewport } from '@/components/tapestry-viewer';
 import { hasSeenArrival, rememberArrival, TapestryArrival } from '@/components/tapestry-arrival';
@@ -178,6 +178,11 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
   const [readingOpen, setReadingOpen] = useState(false);
   const [autoPan, setAutoPan] = useState(false);
   const [autoPanNotch, setAutoPanNotch] = useState(DEFAULT_AUTO_PAN_NOTCH);
+  const [gallery, setGallery] = useState(false);
+  const [galleryClosing, setGalleryClosing] = useState(false);
+  const [galleryCamera, setGalleryCamera] = useState<ViewerViewport>({ x: 0, y: 0, width: 1, height: 1 });
+  const [cameraRequest, setCameraRequest] = useState<ViewerViewport | null>(null);
+  const liveCameraRef = useRef<ViewerViewport | null>(null);
   const autoPanSpeed = AUTO_PAN_SPEEDS[autoPanNotch - 1];
   const pauseAutoPan = useCallback(() => setAutoPan(false), []);
   const { immersive, edges, reveal, setImmersive } = useImmersiveControls(false);
@@ -215,9 +220,13 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
     setViewport(null);
     setInitialViewport(null);
     setReadingOpen(false);
+    setCameraRequest(null);
   }, []);
 
   const goOverview = useCallback(() => {
+    setGallery(false);
+    setGalleryClosing(false);
+    setCameraRequest(null);
     setAutoPan(false);
     setImmersive(false);
     setReadingOpen(false);
@@ -247,6 +256,9 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
 
   useEffect(() => {
     const restoreFromUrl = (firstLoad = false) => {
+      setGallery(false);
+      setGalleryClosing(false);
+      setCameraRequest(null);
       setAutoPan(false);
       setReadingOpen(false);
       const params = new URLSearchParams(window.location.search);
@@ -436,12 +448,50 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
     [manifest.sources],
   );
 
+  const toggleAutoPan = () => {
+    if (!autoPan && mode === 'overview') openScene(scenes[0]);
+    setAutoPan(!autoPan);
+  };
+  const playback = <AutoPanControl playing={autoPan} notch={autoPanNotch} onNotchChange={setAutoPanNotch} onToggle={toggleAutoPan} />;
+  const playbackFloats = gallery || (immersive && mode !== 'overview');
+  const trackCamera = useCallback((camera: ViewerViewport) => { if (!gallery) liveCameraRef.current = camera; }, [gallery]);
+  const trackFlatViewport = useCallback((next: ViewerViewport) => { if (!gallery) setViewport(next); }, [gallery]);
+  const trackFlatExplore = useCallback((center: number) => { if (!gallery) enterFreeExploration(center); }, [gallery, enterFreeExploration]);
+  const galleryMove = useCallback((camera: ViewerViewport) => {
+    const center = Math.max(0, Math.min(1, camera.x + camera.width / 2));
+    const width = Math.min(1, camera.width), height = Math.min(1, camera.height);
+    setViewport({ x: Math.max(0, Math.min(1 - width, center - width / 2)), y: Math.max(0, Math.min(1 - height, camera.y)), width, height });
+    const nextScene = nearestScene(scenes, center);
+    setSceneId(nextScene.id);
+    setActiveAnnotation((current) => current && nextScene.annotations.some((note) => note.id === current.id) ? current : null);
+    setMode('free');
+  }, [scenes]);
+  const prepareFlat = useCallback((camera: ViewerViewport) => {
+    setMode('free');
+    setInitialViewport(null);
+    setCameraRequest(camera);
+    liveCameraRef.current = camera;
+  }, []);
+  const closeGallery = useCallback(() => {
+    setGallery(false); setGalleryClosing(false); setAutoPan(false);
+    window.setTimeout(() => document.querySelector<HTMLElement>('[data-view-toggle="flat"]')?.focus({ preventScroll: true }), 0);
+  }, []);
+  const changeView = (values: string[]) => {
+    const value = values[0];
+    if (!value || galleryClosing) return;
+    pauseAutoPan();
+    if (value === 'gallery' && !gallery) {
+      setGalleryCamera(liveCameraRef.current ?? { x: 0, y: 0, width: 1, height: 1 });
+      setGalleryClosing(false); setGallery(true);
+    } else if (value === 'flat' && gallery) setGalleryClosing(true);
+  };
+
 
   return (
     <>
     <Dialog open={readingOpen && !!scene} onOpenChange={(open) => { setReadingOpen(open); if (open) pauseAutoPan(); }}>
     <main className="explorer" inert={arrivalActive ? true : undefined}>
-      <div className="explorer-stage" data-immersive={immersive && mode !== 'overview'} data-top-open={edges.top} data-bottom-open={edges.bottom || scenePickerOpen}>
+      <div className="explorer-stage" data-gallery={gallery} data-immersive={immersive && mode !== 'overview'} data-top-open={edges.top} data-bottom-open={edges.bottom || scenePickerOpen}>
         <header className="explorer-header">
           <h1>
             <a href="/" onClick={(event) => { event.preventDefault(); goOverview(); }}>
@@ -449,6 +499,10 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
             </a>
           </h1>
         </header>
+        {dziUrl ? <ToggleGroup aria-label="Tapestry view" className="view-switch" value={[gallery && !galleryClosing ? 'gallery' : 'flat']} onValueChange={changeView} disabled={galleryClosing}>
+          <ToggleGroupItem value="gallery">Gallery</ToggleGroupItem>
+          <ToggleGroupItem value="flat" data-view-toggle="flat">Bird’s-eye</ToggleGroupItem>
+        </ToggleGroup> : null}
         <p aria-live="polite" className="sr-only">
           {scene ? `Scene ${scene.id} of 58, ${scene.title}` : 'Complete tapestry overview'}
         </p>
@@ -457,24 +511,30 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
             {scene ? scene.title : 'Complete tapestry overview'}
           </h2>
           <div className={`viewer-workspace ${activeAnnotation ? 'has-annotation' : ''}`}>
-            <div className="viewer-frame" data-mode={mode}>
+            <div className="viewer-frame" data-mode={mode} inert={gallery ? true : undefined}>
               <TapestryViewer
-                autoPan={autoPan}
+                autoPan={autoPan && !gallery}
                 autoPanSpeed={autoPanSpeed.pixelsPerSecond}
                 onAutoPanPause={pauseAutoPan}
                 activeAnnotationId={activeAnnotation?.id}
                 dziUrl={dziUrl}
                 initialViewport={initialViewport}
+                cameraRequest={cameraRequest}
+                onCameraChange={trackCamera}
                 mode={mode}
                 onAnnotationActivate={activateAnnotation}
-                onExplore={enterFreeExploration}
-                onViewportChange={setViewport}
+                onExplore={trackFlatExplore}
+                onViewportChange={trackFlatViewport}
                 onCanvasTap={reveal}
-                onImmersiveChange={setImmersive}
+                onImmersiveChange={gallery && !galleryClosing ? undefined : setImmersive}
                 reduceMotion={reduceMotion}
                 scene={scene}
               />
             </div>
+            {gallery && dziUrl ? <TapestryGallery dziUrl={dziUrl} initialCamera={galleryCamera} closing={galleryClosing}
+              autoPan={autoPan} speed={autoPanSpeed.pixelsPerSecond} reduceMotion={reduceMotion} scene={scene} mode={mode}
+              activeAnnotationId={activeAnnotation?.id} onAnnotationActivate={activateAnnotation}
+              onMove={galleryMove} onManual={pauseAutoPan} onTap={reveal} onPrepareFlat={prepareFlat} onClosed={closeGallery} /> : null}
           {activeAnnotation ? (
             <>
               <button aria-label="Close note" className="annotation-backdrop" onClick={closeAnnotation} type="button" />
@@ -514,6 +574,7 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
           ) : null}
           </div>
         </section>
+        {playbackFloats ? <aside aria-label="Tapestry playback" className="floating-playback">{playback}</aside> : null}
         <div className="bottom-chrome">
         <div className="navigation-dock">
           <p className="scene-caption" key={scene?.id ?? 'overview'}>
@@ -560,41 +621,7 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
             >{mode === 'overview' ? 'Start' : 'Next'}<ArrowRight aria-hidden="true" /></button>
           </nav>
           <div className="exploration-actions">
-          <div className="auto-pan-control">
-            <div className="auto-pan-dial">
-              <span className="sr-only" id="auto-pan-speed-label">Auto-pan speed</span>
-              <Slider
-                aria-labelledby="auto-pan-speed-label auto-pan-speed-value"
-                className="auto-pan-slider"
-                largeStep={1}
-                min={1}
-                max={4}
-                step={1}
-                thumbAlignment="center"
-                value={[autoPanNotch]}
-                onValueChange={(value) => {
-                  const next = Array.isArray(value) ? value[0] : value;
-                  setAutoPanNotch(Math.max(1, Math.min(4, Math.round(next))));
-                }}
-              />
-              <span aria-hidden="true" className="auto-pan-notches">
-                {AUTO_PAN_SPEEDS.map((speed) => <i key={speed.label} />)}
-              </span>
-              <span className="auto-pan-speed-name" id="auto-pan-speed-value">{autoPanSpeed.label}</span>
-            </div>
-            <button
-              aria-label={autoPan ? 'Pause auto-pan' : 'Play auto-pan'}
-              className="auto-pan-play"
-              onClick={() => {
-                if (!autoPan && mode === 'overview') openScene(scenes[0]);
-                setAutoPan(!autoPan);
-              }}
-              type="button"
-            >
-              {autoPan ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
-            </button>
-            <span className="auto-pan-label">Auto-pan</span>
-          </div>
+          {!playbackFloats ? playback : null}
           {mode === 'free' && scene ? (
             <button className="resume-link" onClick={() => openScene(scene)} type="button">
               <Compass aria-hidden="true" /> Resume at Scene {scene.id}
@@ -608,7 +635,7 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
         </div>
         <SceneNavigator activeScene={scene} mode={mode} onJump={openScene} scenes={scenes} viewport={viewport} />
         <footer className="explorer-footer">
-          <span>{isEditorialPreview ? 'Editorial preview · notes awaiting review' : 'An independent, non-commercial project'}</span>
+          <span>An independent, non-commercial project</span>
           <div>
             {scene ? <DialogTrigger render={<button aria-label="Read this scene" className="reading-toggle" ref={readingTriggerRef} type="button" />}><BookOpenText aria-hidden="true" /> Read this scene</DialogTrigger> : null}
             <button aria-label="Copy link to this view" className="share-link" onClick={() => void copyLink()} type="button">
@@ -620,7 +647,7 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
         </div>
       </div>
       {scene ? (
-        <DialogContent className="scene-reading-disclosure explorer" showCloseButton={false} finalFocus={() => annotationPanelRef.current?.querySelector<HTMLElement>('.annotation-panel__close') ?? readingTriggerRef.current} key={scene.id}>
+        <DialogContent className="scene-reading-disclosure explorer translate-x-0 translate-y-0" showCloseButton={false} finalFocus={() => annotationPanelRef.current?.querySelector<HTMLElement>('.annotation-panel__close') ?? readingTriggerRef.current} key={scene.id}>
           <DialogClose render={<button className="reading-close" aria-label="Close scene reading" type="button" />}><X aria-hidden="true" /></DialogClose>
           <section className="scene-reading">
           <div className="scene-summary">

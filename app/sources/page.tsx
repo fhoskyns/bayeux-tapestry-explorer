@@ -87,6 +87,12 @@ export default function SourcesPage() {
         <p>The introduction uses one local device preference to remember that it has been seen. No cookies, tracking or visitor data are sent.</p>
       </section>
 
+      <section className="credit-block" id="gallery-credits">
+        <h2>Interactive gallery study</h2>
+        <p>The optional 3D view uses an original, simplified Blender model of a long glazed case in a pale gallery. It is a conceptual installation, not a measured reconstruction or an officially approved design for the British Museum. Its visual reference is the <a href="https://opera-amsterdam.nl/2026-british-museum-bayeux-tapestry">exhibition designer’s published project</a>.</p>
+        <p>The actual scan is mapped uniformly onto the case: nothing is generated, reconstructed or retouched in the tapestry. The model contains no embedded tapestry images; its live image layers use the same verified Deep Zoom service as Bird’s-eye. Perspective and browser lighting are presentation effects, not evidence about the object or its display conditions. See the <a href="/gallery/provenance.json">geometry provenance and coordinate record</a>.</p>
+      </section>
+
       <section className="editorial-policy">
         <div>
           <p className="eyebrow">Editorial method</p>

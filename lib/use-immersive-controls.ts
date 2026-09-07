@@ -27,11 +27,19 @@ export function useImmersiveControls(initialImmersive = true) {
       const target = event.target instanceof Element ? event.target : null;
       // Bridge the small gap beneath the title so the zoom buttons do not
       // disappear while the pointer travels towards them.
-      const zoomBridge = event.clientX > window.innerWidth - 180 && event.clientY < 180;
+      const zoomBridge = event.clientX > window.innerWidth - 180 && event.clientY < (window.innerWidth <= 700 ? 255 : 180);
       const top = event.clientY < 72 || zoomBridge || !!target?.closest('.explorer-header, .image-controls');
-      const bottom = event.clientY > window.innerHeight - 100 || !!target?.closest('.bottom-chrome, [data-slot="select-content"]');
-      setControls((current) => current.edges.top === top && current.edges.bottom === bottom
-        ? current : { ...current, edges: { top, bottom } });
+      // The persistent playback dock must not dodge the pointer by revealing
+      // the bottom chrome as the pointer approaches it from above or the side.
+      const playbackDock = document.querySelector<HTMLElement>('.floating-playback');
+      const playbackCorner = !!playbackDock && event.clientX > window.innerWidth - 300 && event.clientY > window.innerHeight - 105;
+      const overPlayback = !!target?.closest('.floating-playback');
+      const bottom = !playbackCorner && (event.clientY > window.innerHeight - 100 || !!target?.closest('.bottom-chrome, [data-slot="select-content"]'));
+      setControls((current) => {
+        const nextBottom = overPlayback ? current.edges.bottom : bottom;
+        return current.edges.top === top && current.edges.bottom === nextBottom
+          ? current : { ...current, edges: { top, bottom: nextBottom } };
+      });
     };
     const keyboard = (event: KeyboardEvent) => {
       if (event.key === 'Tab') { window.clearTimeout(timer.current); setControls((current) => ({...current, edges: { top: true, bottom: true }})); }

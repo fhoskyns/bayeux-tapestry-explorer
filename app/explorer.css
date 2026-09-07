@@ -28,7 +28,7 @@
 .explorer .viewer-section { min-height: 0; padding: 0 20px; }
 .explorer .viewer-workspace { position: relative; height: 100%; }
 .explorer .viewer-workspace.has-annotation { display: block; border: 0; box-shadow: none; }
-.explorer .viewer-frame, .explorer .viewer-workspace.has-annotation .viewer-frame { height: 100%; border: 0; box-shadow: none; overflow: hidden; background: #fff; }
+.explorer .viewer-frame, .explorer .viewer-workspace.has-annotation .viewer-frame { height: 100%; border: 0; box-shadow: none; overflow: clip; background: #fff; }
 .explorer .tapestry-canvas-wrap { height: 100%; background: #fff; }
 .explorer .tapestry-canvas, .explorer .viewer-frame[data-mode='overview'] .tapestry-canvas { height: 100%; background: #fff; }
 .explorer .image-controls { position: absolute; z-index: 3; right: 8px; top: 8px; margin: 0; border: 1px solid var(--line); border-radius: 30px; background: rgb(255 255 255 / .94); box-shadow: 0 2px 12px #00000008; }
@@ -156,10 +156,49 @@
 }
 
 /* Immersive mode: chrome overlays the full-height image; it never reserves space. */
-.explorer-stage { display: block; position: relative; height: 100svh; min-height: 0; overflow: hidden; }
+.explorer-stage { display: block; position: relative; height: 100svh; min-height: 0; overflow: clip; }
 .explorer .viewer-section { position: absolute; inset: 0; padding: 0; }
-.explorer .viewer-frame, .explorer .tapestry-canvas { cursor: grab; }
-.explorer .viewer-frame:active, .explorer .tapestry-canvas:active { cursor: grabbing; }
+.explorer .viewer-frame, .explorer .tapestry-canvas { cursor: default; }
+.explorer .navigator-hit-area { cursor: default; }
+.explorer .navigator-window { pointer-events: auto; cursor: url('/cursors/glove.svg') 16 16, grab; }
+.floating-playback { position: absolute; z-index: 26; right: max(16px, env(safe-area-inset-right)); bottom: max(18px, env(safe-area-inset-bottom)); padding: 6px 12px 6px 4px; border: 1px solid #eeece7; border-radius: 40px; background: #fffffff5; box-shadow: 0 3px 20px #0000000d; }
+.explorer-stage[data-bottom-open='true'] .floating-playback { bottom: calc(var(--playback-clearance, 200px) + 12px); }
+.explorer .annotation-marker.is-auto-preview { z-index: 6; }
+.explorer .annotation-marker.is-auto-preview .annotation-marker__dot { width: 42px; height: 42px; background: var(--oxblood); color: #fff; }
+.explorer .annotation-marker.is-auto-preview .annotation-marker__preview { opacity: 1; transform: translateX(-50%) scale(1); pointer-events: auto; }
+.explorer .annotation-marker--edge-left.is-auto-preview .annotation-marker__preview,
+.explorer .annotation-marker--edge-right.is-auto-preview .annotation-marker__preview { transform: scale(1); }
+.view-switch { position: absolute; z-index: 27; top: max(16px, env(safe-area-inset-top)); right: max(16px, env(safe-area-inset-right)); padding: 4px; border: 1px solid #e9e6e1; border-radius: 28px; background: #fffffff5; box-shadow: 0 2px 16px #0000000c; }
+.explorer .view-switch button { min-width: 80px; min-height: 44px; border-radius: 24px; color: #5e5953; font-size: 13px; }
+.explorer .view-switch button[aria-pressed='true'] { background: var(--ink); color: #fff; }
+.explorer-stage:has(.view-switch) .explorer-header { padding-right: 215px; }
+.gallery-layer, .gallery-canvas { position: absolute; inset: 0; }
+.gallery-layer { z-index: 10; opacity: 1; transition: opacity .35s ease; }
+.explorer-stage[data-gallery='true'] .viewer-frame .exit-closeup,
+.explorer-stage[data-gallery='true'] .viewer-frame .image-controls { visibility: hidden; }
+.gallery-layer[data-fading='true'] { opacity: 0; pointer-events: none; }
+.gallery-layer[data-closing='true'] .gallery-canvas { pointer-events: none; }
+.gallery-canvas { overflow: clip; }
+.gallery-canvas canvas { display: block; width: 100%; height: 100%; touch-action: none; outline-offset: -4px; }
+.gallery-marker { position: absolute; transform: translate(-50%, -50%); }
+.gallery-marker[hidden] { display: none !important; }
+.gallery-caption { position: absolute; left: 24px; bottom: 28px; max-width: calc(100% - 325px); color: #534d45; font-size: 12px; line-height: 1.6; pointer-events: none; }
+.gallery-caption span { display: block; font-size: 10px; color: #746b60; }
+.gallery-zoom { position: absolute; right: 20px; top: 86px; display: grid; background: #fffffff0; border: 1px solid #eeece7; border-radius: 26px; }
+.gallery-zoom button { display: grid; width: 44px; height: 44px; place-items: center; border: 0; background: transparent; border-radius: 50%; cursor: pointer; }
+.gallery-zoom svg { width: 18px; }
+.gallery-loading, .gallery-error { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: max-content; max-width: 85vw; padding: 18px 24px; border: 1px solid #e9e6e1; border-radius: 18px; background: #fff; font-size: 14px; box-shadow: 0 8px 40px #0001; }
+.gallery-loading { display: flex; gap: 12px; align-items: center; }
+.gallery-error button { display: inline-block; min-height: 44px; margin: 12px 12px 0 0; text-decoration: underline; }
+.explorer-stage[data-gallery='true'][data-bottom-open='true'] .gallery-caption { opacity: 0; }
+@media (max-width: 700px) {
+  .explorer-stage:has(.view-switch) .explorer-header { padding-top: 78px; padding-right: 20px; }
+  .explorer-stage:has(.view-switch) .image-controls, .gallery-zoom { top: 205px; }
+  .gallery-caption { bottom: 100px; left: 18px; max-width: calc(100% - 36px); }
+  .floating-playback { right: 12px; bottom: 16px; }
+  .explorer-stage[data-bottom-open='true'] .floating-playback { bottom: 230px; }
+}
+@media (prefers-reduced-motion: reduce) { .gallery-layer { transition: none; } }
 .explorer-header { position: absolute; z-index: 20; top: 0; left: 0; right: 0; padding: 18px 24px 28px; background: linear-gradient(#fffffff7 60%, #ffffff00); transform: translateY(-102%); opacity: 0; transition: transform .45s cubic-bezier(.2,.8,.2,1), opacity .3s; pointer-events: none; }
 .explorer-stage[data-top-open='true'] .explorer-header, .explorer-header:has(:focus-visible) { transform: translateY(0); opacity: 1; pointer-events: auto; }
 .bottom-chrome { position: absolute; z-index: 20; bottom: 0; left: 0; right: 0; padding-top: 28px; background: linear-gradient(#ffffff00, #fffffff7 20%); transform: translateY(102%); opacity: 0; transition: transform .45s cubic-bezier(.2,.8,.2,1), opacity .3s; pointer-events: none; }
