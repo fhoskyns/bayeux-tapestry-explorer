@@ -10,13 +10,15 @@ import {
   Compass,
   Copy,
   House,
+  Pause,
+  Play,
   X,
 } from 'lucide-react';
 import Image from 'next/image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
+import { Slider } from '@/components/ui/slider';
 import { Dialog, DialogClose, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { TapestryViewer, type ViewerViewport } from '@/components/tapestry-viewer';
 import { hasSeenArrival, rememberArrival, TapestryArrival } from '@/components/tapestry-arrival';
@@ -24,6 +26,7 @@ import type { Annotation, Scene, TapestryManifest } from '@/lib/tapestry-schema'
 import { preloadSceneImages } from '@/lib/image-preload';
 import { useImmersiveControls } from '@/lib/use-immersive-controls';
 import { annotationLabel } from '@/lib/annotation-label';
+import { AUTO_PAN_SPEEDS, DEFAULT_AUTO_PAN_NOTCH } from '@/lib/auto-pan';
 
 const MASTER_WIDTH = 482096;
 const OVERVIEW_IMAGE =
@@ -174,6 +177,8 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
   const [scenePickerOpen, setScenePickerOpen] = useState(false);
   const [readingOpen, setReadingOpen] = useState(false);
   const [autoPan, setAutoPan] = useState(false);
+  const [autoPanNotch, setAutoPanNotch] = useState(DEFAULT_AUTO_PAN_NOTCH);
+  const autoPanSpeed = AUTO_PAN_SPEEDS[autoPanNotch - 1];
   const pauseAutoPan = useCallback(() => setAutoPan(false), []);
   const { immersive, edges, reveal, setImmersive } = useImmersiveControls(false);
   const initializedRef = useRef(false);
@@ -455,6 +460,7 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
             <div className="viewer-frame" data-mode={mode}>
               <TapestryViewer
                 autoPan={autoPan}
+                autoPanSpeed={autoPanSpeed.pixelsPerSecond}
                 onAutoPanPause={pauseAutoPan}
                 activeAnnotationId={activeAnnotation?.id}
                 dziUrl={dziUrl}
@@ -554,19 +560,41 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
             >{mode === 'overview' ? 'Start' : 'Next'}<ArrowRight aria-hidden="true" /></button>
           </nav>
           <div className="exploration-actions">
-          <label aria-label="Auto-pan along the tapestry" className="auto-pan-control" htmlFor="auto-pan-toggle">
-            <Switch
-              id="auto-pan-toggle"
-              aria-label="Auto-pan along the tapestry"
-              checked={autoPan}
-              className="auto-pan-switch"
-              onCheckedChange={(checked) => {
-                if (checked && mode === 'overview') openScene(scenes[0]);
-                setAutoPan(checked);
+          <div className="auto-pan-control">
+            <div className="auto-pan-dial">
+              <span className="sr-only" id="auto-pan-speed-label">Auto-pan speed</span>
+              <Slider
+                aria-labelledby="auto-pan-speed-label auto-pan-speed-value"
+                className="auto-pan-slider"
+                largeStep={1}
+                min={1}
+                max={4}
+                step={1}
+                thumbAlignment="center"
+                value={[autoPanNotch]}
+                onValueChange={(value) => {
+                  const next = Array.isArray(value) ? value[0] : value;
+                  setAutoPanNotch(Math.max(1, Math.min(4, Math.round(next))));
+                }}
+              />
+              <span aria-hidden="true" className="auto-pan-notches">
+                {AUTO_PAN_SPEEDS.map((speed) => <i key={speed.label} />)}
+              </span>
+              <span className="auto-pan-speed-name" id="auto-pan-speed-value">{autoPanSpeed.label}</span>
+            </div>
+            <button
+              aria-label={autoPan ? 'Pause auto-pan' : 'Play auto-pan'}
+              className="auto-pan-play"
+              onClick={() => {
+                if (!autoPan && mode === 'overview') openScene(scenes[0]);
+                setAutoPan(!autoPan);
               }}
-            />
-            <span>Auto-pan</span>
-          </label>
+              type="button"
+            >
+              {autoPan ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
+            </button>
+            <span className="auto-pan-label">Auto-pan</span>
+          </div>
           {mode === 'free' && scene ? (
             <button className="resume-link" onClick={() => openScene(scene)} type="button">
               <Compass aria-hidden="true" /> Resume at Scene {scene.id}

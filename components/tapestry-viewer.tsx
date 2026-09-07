@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { selectorCenter, type Annotation, type Scene } from '@/lib/tapestry-schema';
 import { annotationLabel } from '@/lib/annotation-label';
+import type { AutoPanSpeed } from '@/lib/auto-pan';
 
 const MASTER_WIDTH = 482096;
 const OVERVIEW_IMAGE =
@@ -23,6 +24,7 @@ export type ViewerViewport = {
 
 type TapestryViewerProps = {
   autoPan?: boolean;
+  autoPanSpeed?: AutoPanSpeed;
   onAutoPanPause?: () => void;
   activeAnnotationId?: string;
   initialViewport?: ViewerViewport | null;
@@ -40,6 +42,7 @@ type TapestryViewerProps = {
 
 type ViewerContext = Pick<
   TapestryViewerProps,
+  | 'autoPanSpeed'
   | 'activeAnnotationId'
   | 'dziUrl'
   | 'initialViewport'
@@ -197,6 +200,7 @@ function viewportForViewer(
 
 export function TapestryViewer({
   autoPan = false,
+  autoPanSpeed = 28,
   onAutoPanPause,
   activeAnnotationId,
   initialViewport,
@@ -236,6 +240,7 @@ export function TapestryViewer({
   const reportImmersionRef = useRef<() => void>(() => undefined);
   const fitRef = useRef<() => void>(() => undefined);
   const contextRef = useRef<ViewerContext>({
+    autoPanSpeed,
     activeAnnotationId,
     dziUrl,
     initialViewport,
@@ -257,6 +262,7 @@ export function TapestryViewer({
 
   useEffect(() => {
     contextRef.current = {
+      autoPanSpeed,
       activeAnnotationId,
       dziUrl,
       initialViewport,
@@ -272,6 +278,7 @@ export function TapestryViewer({
       scene,
     };
   }, [
+    autoPanSpeed,
     activeAnnotationId,
     dziUrl,
     initialViewport,
@@ -375,6 +382,9 @@ export function TapestryViewer({
       viewer.addHandler('canvas-double-click', manualExplore);
       viewer.addHandler('canvas-key', (event) => {
         const code = event.originalEvent?.code;
+        if (code && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'Equal', 'Minus', 'Digit0', 'KeyR', 'KeyF'].includes(code)) {
+          contextRef.current.onAutoPanPause?.();
+        }
         if (viewer && !(viewer as PanAwareViewer).panVertical && code && ['ArrowUp', 'ArrowDown', 'KeyW', 'KeyS'].includes(code)) {
           event.preventDefaultAction = true;
           return;
@@ -385,7 +395,7 @@ export function TapestryViewer({
             'KeyW', 'KeyA', 'KeyS', 'KeyD', 'Equal', 'Minus',
           ].includes(code)
         ) {
-          manualExplore();
+          reportExplore();
         }
       });
       viewer.addHandler('animation-finish', () => {
@@ -726,7 +736,7 @@ export function TapestryViewer({
       const elapsed = previousTime === null ? 0 : Math.min((time - previousTime) / 1000, 0.05);
       previousTime = time;
       if (elapsed > 0) {
-        const distance = Math.min(remaining, view.width * 28 / Math.max(1, viewer.viewport.getContainerSize().x) * elapsed);
+        const distance = Math.min(remaining, view.width * (contextRef.current.autoPanSpeed ?? 28) / Math.max(1, viewer.viewport.getContainerSize().x) * elapsed);
         exploringRef.current = true;
         viewer.viewport.panBy(new OpenSeadragon.Point(distance, 0), true);
         if (time - reportedAt >= 250 || distance === remaining) {

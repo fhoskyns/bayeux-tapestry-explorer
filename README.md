@@ -16,7 +16,7 @@ The complete lossless Deep Zoom pyramid passed a fresh full verification on 7 Se
 - A 58-scene guided tour with previous/next controls and shareable URLs.
 - Height-fitted scenes, horizontal dragging, wheel/pinch zoom, explicit image controls, and resumable free exploration. Vertical movement is locked while the whole image height is visible and unlocks for detail zoom.
 - An X in close-up returns to a white-surrounded context view at the same position, revealing the title and controls. Zooming back in hides them; Home still shows the entire strip.
-- An opt-in Auto-pan switch travels slowly to the right at 28 screen pixels per second. It stops immediately when switched off, on manual navigation or note reading, and at the surviving ending. It does not start automatically, including in shared URLs; hidden tabs suspend movement.
+- An Auto-pan dial offers four speeds: Slow (14), Gentle (28, default), Steady (56), and Brisk (84 screen pixels per second). A separate borderless play/pause button starts or stops movement; selecting a notch alone never starts playback. Manual navigation, note reading and the surviving ending pause it. It does not start automatically, including in shared URLs; hidden tabs suspend movement.
 - A complete-strip navigator with hover magnification, click-to-jump, viewport indication, and an accessible scene selector.
 - Chapter-labelled, keyboard-accessible annotation markers (1a, 1b, 2a…), a desktop evidence panel, a mobile bottom panel, Latin tituli, draft project translations, and direct source links.
 

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TapestryViewer } from '@/components/tapestry-viewer';
 import { tapestryManifest } from '@/data/tapestry-manifest';
+import { AUTO_PAN_SPEEDS } from '@/lib/auto-pan';
 
 const osd = vi.hoisted(() => {
   type EventData = {
@@ -140,9 +141,9 @@ describe('real tapestry viewer', () => {
     };
   }
 
-  it('never auto-pans unless opted in, caps elapsed time, and cancels on off or unmount', async () => {
+  it.each(AUTO_PAN_SPEEDS)('$label speed requires opt-in, caps elapsed time, and cancels on off or unmount', async ({ pixelsPerSecond }) => {
     const clock = animationClock();
-    const props = { ...viewerProps(), dziUrl: 'https://tiles.example/v1/tapestry.dzi', onAutoPanPause: vi.fn() };
+    const props = { ...viewerProps(), autoPanSpeed: pixelsPerSecond, dziUrl: 'https://tiles.example/v1/tapestry.dzi', onAutoPanPause: vi.fn() };
     const view = render(<TapestryViewer {...props} />);
     try {
       const viewer = await initializedViewer();
@@ -157,7 +158,7 @@ describe('real tapestry viewer', () => {
       expect(viewer.viewport.panBy).not.toHaveBeenCalled();
       clock.step(2100);
       expect(viewer.viewport.panBy).toHaveBeenCalledExactlyOnceWith(
-        { x: 0.2 * 28 / 1200 * 0.05, y: 0 }, true,
+        { x: 0.2 * pixelsPerSecond / 1200 * 0.05, y: 0 }, true,
       );
       expect(props.onAutoPanPause).not.toHaveBeenCalled();
       expect(clock.frames.size).toBe(1);
@@ -189,6 +190,28 @@ describe('real tapestry viewer', () => {
     } finally { view.unmount(); clock.restore(); }
   });
 
+  it('changes speed while playing without moving the camera or restarting the frame clock', async () => {
+    const clock = animationClock();
+    const props = { ...viewerProps(), onAutoPanPause: vi.fn() };
+    const view = render(<TapestryViewer {...props} autoPan autoPanSpeed={14} />);
+    try {
+      const viewer = await initializedViewer();
+      viewer.viewBounds = { x: 0.2, y: 0.1, width: 0.2, height: 0.2 };
+      act(() => { viewer.emit('open'); viewer.emit('update-viewport'); });
+      clock.step(1000);
+      clock.step(1050);
+      expect(viewer.viewport.panBy).toHaveBeenLastCalledWith({ x: 0.2 * 14 / 1200 * 0.05, y: 0 }, true);
+      const fits = viewer.viewport.fitBounds.mock.calls.length;
+      view.rerender(<TapestryViewer {...props} autoPan autoPanSpeed={84} />);
+      expect(viewer.viewport.panBy).toHaveBeenCalledOnce();
+      expect(clock.frames.size).toBe(1);
+      clock.step(1100);
+      expect(viewer.viewport.panBy).toHaveBeenLastCalledWith({ x: 0.2 * 84 / 1200 * 0.05, y: 0 }, true);
+      expect(viewer.viewport.fitBounds).toHaveBeenCalledTimes(fits);
+      expect(props.onAutoPanPause).not.toHaveBeenCalled();
+    } finally { view.unmount(); clock.restore(); }
+  });
+
   it('pauses auto-pan for manual canvas gestures and image controls', async () => {
     const clock = animationClock();
     const props = { ...viewerProps(), onAutoPanPause: vi.fn() };
@@ -201,6 +224,11 @@ describe('real tapestry viewer', () => {
         props.onAutoPanPause.mockClear();
         act(() => viewer.emit(name, { originalEvent: { code: 'ArrowRight' } }));
         expect(props.onAutoPanPause, name).toHaveBeenCalledOnce();
+      }
+      for (const code of ['ArrowUp', 'ArrowDown', 'Digit0', 'KeyR', 'KeyF']) {
+        props.onAutoPanPause.mockClear();
+        act(() => viewer.emit('canvas-key', { originalEvent: { code } }));
+        expect(props.onAutoPanPause, code).toHaveBeenCalledOnce();
       }
       for (const name of ['Zoom in', 'Zoom out', 'Fit current scene', 'Leave close-up — show title and navigation']) {
         props.onAutoPanPause.mockClear();

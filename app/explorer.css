@@ -56,10 +56,23 @@
 .resume-link:hover { text-decoration: underline; }
 .resume-link svg { width: 14px; height: 14px; margin-right: 6px; }
 .exploration-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0 18px; }
-.auto-pan-control { display: inline-flex; min-height: 44px; align-items: center; gap: 10px; padding-inline: 6px; color: var(--quiet); font-size: 12px; cursor: pointer; }
-.explorer .auto-pan-switch { background: #d8d6d2; }
-.explorer .auto-pan-switch[data-checked] { background: var(--ink); }
-.auto-pan-switch [data-slot='switch-thumb'] { background: #fff; }
+.auto-pan-control { display: inline-flex; min-height: 52px; align-items: center; padding-inline: 6px; color: var(--quiet); }
+.auto-pan-dial { position: relative; width: 120px; padding: 0 12px 16px; }
+.explorer .auto-pan-slider { width: 100%; cursor: pointer; }
+.auto-pan-slider > div { height: 36px; }
+.explorer .auto-pan-slider [data-slot='slider-track'] { height: 14px; background: linear-gradient(90deg, #dbd4cf, #826e68); }
+.explorer .auto-pan-slider [data-slot='slider-range'] { background: transparent; }
+.explorer .auto-pan-slider [data-slot='slider-thumb'] { z-index: 2; width: 24px; height: 24px; border: 1px solid #e6e2df; box-shadow: 0 1px 5px #0002; background: #fff; }
+.auto-pan-slider [data-slot='slider-thumb']::after { inset: -10px; }
+.auto-pan-slider:focus-within { outline: 2px solid var(--ochre); outline-offset: 3px; border-radius: 30px; }
+.auto-pan-notches { pointer-events: none; position: absolute; inset: 16px 10px auto; display: flex; justify-content: space-between; }
+.auto-pan-notches i { width: 4px; height: 4px; border-radius: 50%; background: #fff; }
+.auto-pan-speed-name { position: absolute; bottom: 0; inset-inline: 0; text-align: center; font-size: .75rem; line-height: 16px; }
+.auto-pan-play { display: grid; place-items: center; width: 44px; height: 44px; margin-inline: 8px 1px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--ink); cursor: pointer; }
+.auto-pan-play:hover { background: #f4f4f4; }
+.auto-pan-play:focus-visible { outline: 2px solid var(--ochre); outline-offset: 2px; }
+.auto-pan-play svg { width: 19px; height: 19px; fill: currentColor; stroke-width: 1.5; }
+.auto-pan-label { font-size: .875rem; white-space: nowrap; }
 .exploration-actions .resume-link, .exploration-actions .gesture-hint { margin: 0; }
 .explorer .tapestry-navigator { position: relative; border: 0; background: #fff; margin: 0 40px; padding: 0; }
 .explorer .navigator-hit-area { position: relative; display: flex; height: 44px; min-height: 44px; align-items: center; padding: 0; cursor: crosshair; }

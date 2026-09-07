@@ -12,8 +12,9 @@ vi.mock('@/lib/satellite-flight', () => ({
 }));
 
 vi.mock('@/components/tapestry-viewer', () => ({
-  TapestryViewer: ({ autoPan, onAutoPanPause, initialViewport, mode, onExplore, onViewportChange, reduceMotion, scene }: {
+  TapestryViewer: ({ autoPan, autoPanSpeed, onAutoPanPause, initialViewport, mode, onExplore, onViewportChange, reduceMotion, scene }: {
     autoPan?: boolean;
+    autoPanSpeed?: number;
     onAutoPanPause?: () => void;
     initialViewport?: { x: number; y: number; width: number; height: number } | null;
     mode: string;
@@ -26,6 +27,7 @@ vi.mock('@/components/tapestry-viewer', () => ({
       data-initial-viewport={initialViewport ? JSON.stringify(initialViewport) : ''}
       data-mode={mode}
       data-auto-pan={String(Boolean(autoPan))}
+      data-auto-pan-speed={autoPanSpeed}
       data-reduce-motion={String(reduceMotion)}
       data-testid="mock-viewer"
       data-viewer-canvas="true"
@@ -80,39 +82,67 @@ describe('guided tour interactions', () => {
 
   it('keeps auto-pan off by default, starts at scene 01 when enabled, and permits switching off', () => {
     render(<TapestryExplorer manifest={tapestryManifest} />);
-    const toggle = screen.getByRole('switch', { name: 'Auto-pan along the tapestry' });
-    expect(toggle).toHaveAttribute('aria-checked', 'false');
+    const toggle = screen.getByRole('button', { name: 'Play auto-pan' });
+    expect(toggle).toHaveAccessibleName('Play auto-pan');
     expect(screen.getByTestId('mock-viewer')).toHaveAttribute('data-auto-pan', 'false');
     fireEvent.click(toggle);
-    expect(toggle).toHaveAttribute('aria-checked', 'true');
+    expect(toggle).toHaveAccessibleName('Pause auto-pan');
     expect(screen.getByText('viewer scene 01')).toBeInTheDocument();
     expect(screen.getByTestId('mock-viewer')).toHaveAttribute('data-auto-pan', 'true');
     fireEvent.click(toggle);
-    expect(toggle).toHaveAttribute('aria-checked', 'false');
+    expect(toggle).toHaveAccessibleName('Play auto-pan');
     expect(screen.getByTestId('mock-viewer')).toHaveAttribute('data-auto-pan', 'false');
   });
 
   it('pauses auto-pan on manual interruption, navigation, reading, and history restoration', () => {
     window.history.replaceState(null, '', '/?scene=01');
     render(<TapestryExplorer manifest={tapestryManifest} />);
-    const toggle = screen.getByRole('switch', { name: 'Auto-pan along the tapestry' });
+    const toggle = screen.getByRole('button', { name: 'Play auto-pan' });
     fireEvent.click(toggle);
     fireEvent.click(screen.getByRole('button', { name: 'Simulate manual interruption' }));
-    expect(toggle).toHaveAttribute('aria-checked', 'false');
+    expect(toggle).toHaveAccessibleName('Play auto-pan');
     fireEvent.click(toggle);
     fireEvent.click(screen.getByRole('button', { name: 'Next scene' }));
-    expect(toggle).toHaveAttribute('aria-checked', 'false');
+    expect(toggle).toHaveAccessibleName('Play auto-pan');
     fireEvent.click(toggle);
     fireEvent.click(screen.getByRole('button', { name: 'Read this scene' }));
-    expect(toggle).toHaveAttribute('aria-checked', 'false');
+    expect(toggle).toHaveAccessibleName('Play auto-pan');
     fireEvent.click(screen.getByRole('button', { name: 'Close scene reading' }));
     fireEvent.click(toggle);
     act(() => {
       window.history.replaceState(null, '', '/?scene=07');
       window.dispatchEvent(new PopStateEvent('popstate'));
     });
-    expect(toggle).toHaveAttribute('aria-checked', 'false');
+    expect(toggle).toHaveAccessibleName('Play auto-pan');
     expect(screen.getByText('viewer scene 07')).toBeInTheDocument();
+  });
+
+  it('offers four keyboard-adjustable speeds without starting playback or losing the chosen notch', () => {
+    render(<TapestryExplorer manifest={tapestryManifest} />);
+    const speed = screen.getByRole('slider', { name: /auto-pan speed/i });
+    const viewer = screen.getByTestId('mock-viewer');
+    expect(viewer).toHaveAttribute('data-auto-pan-speed', '28');
+    expect(speed).toHaveAccessibleName('Auto-pan speed Gentle');
+    fireEvent.keyDown(speed, { key: 'Home' });
+    expect(viewer).toHaveAttribute('data-auto-pan-speed', '14');
+    expect(speed).toHaveAccessibleName('Auto-pan speed Slow');
+    fireEvent.keyDown(speed, { key: 'ArrowRight' });
+    expect(viewer).toHaveAttribute('data-auto-pan-speed', '28');
+    fireEvent.keyDown(speed, { key: 'ArrowRight' });
+    expect(viewer).toHaveAttribute('data-auto-pan-speed', '56');
+    expect(speed).toHaveAccessibleName('Auto-pan speed Steady');
+    fireEvent.keyDown(speed, { key: 'End' });
+    expect(viewer).toHaveAttribute('data-auto-pan-speed', '84');
+    expect(speed).toHaveAccessibleName('Auto-pan speed Brisk');
+    expect(viewer).toHaveAttribute('data-auto-pan', 'false');
+    fireEvent.click(screen.getByRole('button', { name: 'Play auto-pan' }));
+    fireEvent.keyDown(speed, { key: 'ArrowLeft' });
+    expect(viewer).toHaveAttribute('data-auto-pan', 'true');
+    expect(viewer).toHaveAttribute('data-auto-pan-speed', '56');
+    fireEvent.click(screen.getByRole('button', { name: 'Pause auto-pan' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Next scene' }));
+    expect(viewer).toHaveAttribute('data-auto-pan-speed', '56');
+    expect(viewer).toHaveAttribute('data-auto-pan', 'false');
   });
 
   it('uses the containing scene, including uneven divisions and the final edge', () => {
