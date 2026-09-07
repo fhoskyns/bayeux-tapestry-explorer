@@ -1,10 +1,11 @@
 'use client';
 
-import { Focus, Minus, Plus, RefreshCw } from 'lucide-react';
+import { Focus, Minus, Plus, RefreshCw, X } from 'lucide-react';
 import type OpenSeadragonType from 'openseadragon';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { selectorCenter, type Annotation, type Scene } from '@/lib/tapestry-schema';
+import { annotationLabel } from '@/lib/annotation-label';
 
 const MASTER_WIDTH = 482096;
 const OVERVIEW_IMAGE =
@@ -17,9 +18,12 @@ export type ViewerViewport = {
   y: number;
   width: number;
   height: number;
+  framing?: 'context';
 };
 
 type TapestryViewerProps = {
+  autoPan?: boolean;
+  onAutoPanPause?: () => void;
   activeAnnotationId?: string;
   initialViewport?: ViewerViewport | null;
   mode: ViewerMode;
@@ -31,6 +35,7 @@ type TapestryViewerProps = {
   onViewportChange: (viewport: ViewerViewport) => void;
   onReady?: () => void;
   onCanvasTap?: () => void;
+  onImmersiveChange?: (immersive: boolean) => void;
 };
 
 type ViewerContext = Pick<
@@ -43,6 +48,8 @@ type ViewerContext = Pick<
   | 'onExplore'
   | 'onReady'
   | 'onCanvasTap'
+  | 'onImmersiveChange'
+  | 'onAutoPanPause'
   | 'onViewportChange'
   | 'reduceMotion'
   | 'scene'
@@ -56,7 +63,7 @@ type MotionAwareViewport = OpenSeadragonType.Viewport & {
   zoomSpring: OpenSeadragonType.Spring;
 };
 
-type PanAwareViewer = OpenSeadragonType.Viewer & { panVertical: boolean };
+type PanAwareViewer = OpenSeadragonType.Viewer & { panVertical: boolean; visibilityRatio: number };
 
 function clamp(value: number, minimum = 0, maximum = 1) {
   return Math.max(minimum, Math.min(maximum, value));
@@ -65,12 +72,29 @@ function clamp(value: number, minimum = 0, maximum = 1) {
 function normalizeViewport({ x, y, width, height }: ViewerViewport): ViewerViewport {
   const normalizedWidth = clamp(width, 0.000001);
   const normalizedHeight = clamp(height, 0.000001);
+  const context = height > 1 / 0.84;
 
   return {
-    x: clamp(x, 0, 1 - normalizedWidth),
+    x: context
+      ? clamp(x, -normalizedWidth / 2, 1 - normalizedWidth / 2)
+      : clamp(x, 0, 1 - normalizedWidth),
     y: clamp(y, 0, 1 - normalizedHeight),
     width: normalizedWidth,
     height: normalizedHeight,
+    ...(context ? { framing: 'context' as const } : {}),
+  };
+}
+
+/** Fit between the real chrome, including compact landscape / enlarged text. */
+function contextSpace(element: HTMLElement | null, containerHeight: number) {
+  const stage = element?.closest('.explorer-stage');
+  const top = (stage?.querySelector('.explorer-header')?.getBoundingClientRect().height ?? 0) + 16;
+  // Reserve the small extra height of Resume when leaving a guided scene.
+  const bottom = (stage?.querySelector('.bottom-chrome')?.getBoundingClientRect().height ?? 0) + 32;
+  const available = Math.max(1, containerHeight - top - bottom);
+  return {
+    fill: clamp(available / Math.max(1, containerHeight), 0.1, 0.6),
+    anchor: clamp((top + available / 2) / Math.max(1, containerHeight), 0.1, 0.9),
   };
 }
 
@@ -86,6 +110,7 @@ function createMarker(
   onActivate: (annotation: Annotation, trigger: HTMLElement) => void,
 ) {
   const marker = document.createElement('button');
+  const label = annotationLabel(annotation.sceneId, index);
   marker.type = 'button';
   const edgeClass = horizontalPosition < 0.2
     ? ' annotation-marker--edge-left'
@@ -95,7 +120,7 @@ function createMarker(
   marker.className = `annotation-marker annotation-marker--${annotation.category}${edgeClass}${active ? ' is-active' : ''}`;
   marker.setAttribute(
     'aria-label',
-    `Note ${index + 1}, ${annotation.category}: ${annotation.title}. ${annotation.preview}`,
+    `Note ${label}, ${annotation.category}: ${annotation.title}. ${annotation.preview}`,
   );
   marker.setAttribute('aria-pressed', String(active));
   marker.dataset.annotationId = annotation.id;
@@ -103,7 +128,7 @@ function createMarker(
   const dot = document.createElement('span');
   dot.className = 'annotation-marker__dot';
   dot.setAttribute('aria-hidden', 'true');
-  dot.textContent = String(index + 1);
+  dot.textContent = label;
 
   const preview = document.createElement('span');
   preview.className = 'annotation-marker__preview';
@@ -171,6 +196,8 @@ function viewportForViewer(
 }
 
 export function TapestryViewer({
+  autoPan = false,
+  onAutoPanPause,
   activeAnnotationId,
   initialViewport,
   mode,
@@ -182,6 +209,7 @@ export function TapestryViewer({
   onViewportChange,
   onReady,
   onCanvasTap,
+  onImmersiveChange,
 }: TapestryViewerProps) {
   const elementRef = useRef<HTMLDivElement>(null);
   const transitionRef = useRef<HTMLCanvasElement>(null);
@@ -198,8 +226,14 @@ export function TapestryViewer({
   const restoredViewportRef = useRef<ViewerViewport | null>(null);
   const liveViewportRef = useRef<ViewerViewport | null>(null);
   const exploringRef = useRef(false);
+  const immersiveRef = useRef(false);
+  const relaxingRef = useRef(false);
+  const contextAnchorRef = useRef<number | null>(null);
+  const relaxRef = useRef<() => void>(() => undefined);
+  const [immersive, setImmersive] = useState(false);
   const failedTilesRef = useRef(new Set<string>());
   const renderOverlaysRef = useRef<() => void>(() => undefined);
+  const reportImmersionRef = useRef<() => void>(() => undefined);
   const fitRef = useRef<() => void>(() => undefined);
   const contextRef = useRef<ViewerContext>({
     activeAnnotationId,
@@ -210,6 +244,8 @@ export function TapestryViewer({
     onExplore,
     onReady,
     onCanvasTap,
+    onImmersiveChange,
+    onAutoPanPause,
     onViewportChange,
     reduceMotion,
     scene,
@@ -229,6 +265,8 @@ export function TapestryViewer({
       onExplore,
       onReady,
       onCanvasTap,
+      onImmersiveChange,
+      onAutoPanPause,
       onViewportChange,
       reduceMotion,
       scene,
@@ -242,6 +280,8 @@ export function TapestryViewer({
     onExplore,
     onReady,
     onCanvasTap,
+    onImmersiveChange,
+    onAutoPanPause,
     onViewportChange,
     reduceMotion,
     scene,
@@ -301,18 +341,38 @@ export function TapestryViewer({
         }
       };
 
+      const reportImmersion = () => {
+        const item = viewer?.world.getItemAt(0);
+        if (!viewer?.viewport || !item) return;
+        // Use the real visible height, before shareable bounds clamp white margins.
+        const fill = item.getBounds(true).height / viewer.viewport.getBounds(true).height;
+        const next = contextRef.current.mode !== 'overview' && !relaxingRef.current &&
+          fill > (immersiveRef.current ? 0.84 : 0.9);
+        if (next === immersiveRef.current) return;
+        immersiveRef.current = next;
+        setImmersive(next);
+        contextRef.current.onImmersiveChange?.(next);
+      };
+      reportImmersionRef.current = reportImmersion;
+
       const reportExplore = () => {
         if (!viewer || waitingForDrawRef.current) return;
         const viewport = viewportForViewer(viewer, contextRef.current);
         if (!viewport) return;
         exploringRef.current = true;
+        relaxingRef.current = false;
         contextRef.current.onExplore(clamp(viewport.x + viewport.width / 2));
       };
 
-      viewer.addHandler('canvas-drag-end', reportExplore);
-      viewer.addHandler('canvas-scroll', reportExplore);
-      viewer.addHandler('canvas-pinch', reportExplore);
-      viewer.addHandler('canvas-double-click', reportExplore);
+      const manualExplore = () => {
+        contextRef.current.onAutoPanPause?.();
+        reportExplore();
+      };
+      viewer.addHandler('canvas-drag', () => contextRef.current.onAutoPanPause?.());
+      viewer.addHandler('canvas-drag-end', manualExplore);
+      viewer.addHandler('canvas-scroll', manualExplore);
+      viewer.addHandler('canvas-pinch', manualExplore);
+      viewer.addHandler('canvas-double-click', manualExplore);
       viewer.addHandler('canvas-key', (event) => {
         const code = event.originalEvent?.code;
         if (viewer && !(viewer as PanAwareViewer).panVertical && code && ['ArrowUp', 'ArrowDown', 'KeyW', 'KeyS'].includes(code)) {
@@ -325,10 +385,12 @@ export function TapestryViewer({
             'KeyW', 'KeyA', 'KeyS', 'KeyD', 'Equal', 'Minus',
           ].includes(code)
         ) {
-          reportExplore();
+          manualExplore();
         }
       });
       viewer.addHandler('animation-finish', () => {
+        relaxingRef.current = false;
+        reportImmersion();
         reportViewport();
         // Input events fire before OSD applies motion. Reconcile again after
         // keyboard, pinch, wheel or flick movement reaches its final position.
@@ -337,19 +399,30 @@ export function TapestryViewer({
       viewer.addHandler('after-resize', () => {
         window.cancelAnimationFrame(resizeFrame);
         resizeFrame = window.requestAnimationFrame(() => {
-          if (!cancelled && contextRef.current.mode !== 'free') fitRef.current();
+          if (cancelled) return;
+          if (contextAnchorRef.current !== null && contextRef.current.mode === 'free') relaxRef.current();
+          else if (contextRef.current.mode !== 'free') fitRef.current();
         });
       });
       viewer.addHandler('viewport-change', () => {
         if (!viewer?.viewport) return;
         const item = viewer.world.getItemAt(0);
         if (!item) return;
+        reportImmersion();
         const imageBounds = item.getBounds(true);
-        const fitsHeight = viewer.viewport.getBounds(true).height >= imageBounds.height - 0.0000001;
+        const viewHeight = viewer.viewport.getBounds(true).height;
+        const fill = imageBounds.height / viewHeight;
+        const fitsHeight = viewHeight >= imageBounds.height - 0.0000001;
+        if ((!relaxingRef.current && fill >= 1) || contextRef.current.mode === 'overview') contextAnchorRef.current = null;
+        else if (fill < 0.84 && contextAnchorRef.current === null && contextRef.current.mode === 'free') {
+          contextAnchorRef.current = contextSpace(elementRef.current, viewer.viewport.getContainerSize().y).anchor;
+        }
+        (viewer as PanAwareViewer).visibilityRatio = contextAnchorRef.current === null ? 1 : 0.5;
         (viewer as PanAwareViewer).panVertical = !fitsHeight;
         if (fitsHeight) {
           const spring = (viewer.viewport as MotionAwareViewport).centerSpringY;
-          const centerY = imageBounds.y + imageBounds.height / 2;
+          const anchor = contextAnchorRef.current === null ? 0.5 : clamp(contextAnchorRef.current, fill / 2, 1 - fill / 2);
+          const centerY = imageBounds.y + imageBounds.height / 2 + viewHeight * (0.5 - anchor);
           if (Math.abs(spring.current.value - centerY) > 0.0000001 || Math.abs(spring.target.value - centerY) > 0.0000001) {
             // Reset Y alone: horizontal pan and momentum remain untouched.
             spring.resetTo(centerY);
@@ -361,6 +434,7 @@ export function TapestryViewer({
         if (!waitingForDrawRef.current || !item || item !== pendingItemRef.current || !item.getFullyLoaded()) return;
         waitingForDrawRef.current = false;
         setLoading(false);
+        reportImmersion();
         renderOverlaysRef.current();
         contextRef.current.onReady?.();
         reportViewport();
@@ -403,6 +477,8 @@ export function TapestryViewer({
     return () => {
       cancelled = true;
       renderOverlaysRef.current = () => undefined;
+      reportImmersionRef.current = () => undefined;
+      relaxRef.current = () => undefined;
       fitRef.current = () => undefined;
       failedTiles.clear();
       window.clearTimeout(transitionTimerRef.current);
@@ -420,7 +496,16 @@ export function TapestryViewer({
 
     const sourceKey = dziUrl ?? (mode === 'overview' || !scene ? OVERVIEW_IMAGE : scene.imageUrl);
     const requestId = ++openRequestRef.current;
-    if (mode !== 'free') exploringRef.current = false;
+    if (mode !== 'free') {
+      exploringRef.current = false;
+      relaxingRef.current = false;
+      contextAnchorRef.current = null;
+    }
+    if (mode === 'overview' && immersiveRef.current) {
+      immersiveRef.current = false;
+      setImmersive(false);
+      contextRef.current.onImmersiveChange?.(false);
+    }
     if (!initialViewport) restoredViewportRef.current = null;
 
     const fitScene = () => {
@@ -566,6 +651,7 @@ export function TapestryViewer({
         restoredViewportRef.current = initialViewport;
       } else if (mode !== 'free') fitScene();
       renderOverlays();
+      reportImmersionRef.current();
       return;
     }
 
@@ -609,6 +695,61 @@ export function TapestryViewer({
 
   useEffect(() => {
     const viewer = viewerRef.current;
+    const OpenSeadragon = runtimeRef.current;
+    if (!autoPan || !viewer || !OpenSeadragon) return;
+    let frame = 0;
+    let previousTime: number | null = null;
+    let reportedAt = -Infinity;
+    let cancelled = false;
+    const step = (time: number) => {
+      if (cancelled) return;
+      const item = viewer.world.getItemAt(0);
+      if (document.hidden || waitingForDrawRef.current || !item || contextRef.current.mode === 'overview') {
+        previousTime = null;
+        frame = window.requestAnimationFrame(step);
+        return;
+      }
+      const view = viewer.viewport.getBounds(true);
+      const target = viewer.viewport.getBounds(false);
+      // Let the guided entry finish before taking over its horizontal motion.
+      if (Math.abs(view.width - target.width) + Math.abs(view.x - target.x) > view.width * 0.0001) {
+        previousTime = null;
+        frame = window.requestAnimationFrame(step);
+        return;
+      }
+      const image = item.getBounds(true);
+      const remaining = image.x + image.width - (view.x + view.width);
+      if (remaining <= image.width * 0.00000001) {
+        contextRef.current.onAutoPanPause?.();
+        return;
+      }
+      const elapsed = previousTime === null ? 0 : Math.min((time - previousTime) / 1000, 0.05);
+      previousTime = time;
+      if (elapsed > 0) {
+        const distance = Math.min(remaining, view.width * 28 / Math.max(1, viewer.viewport.getContainerSize().x) * elapsed);
+        exploringRef.current = true;
+        viewer.viewport.panBy(new OpenSeadragon.Point(distance, 0), true);
+        if (time - reportedAt >= 250 || distance === remaining) {
+          const viewport = viewportForViewer(viewer, contextRef.current);
+          if (viewport) {
+            liveViewportRef.current = viewport;
+            contextRef.current.onViewportChange(viewport);
+            contextRef.current.onExplore(clamp(viewport.x + viewport.width / 2));
+          }
+          reportedAt = time;
+        }
+      }
+      frame = window.requestAnimationFrame(step);
+    };
+    frame = window.requestAnimationFrame(step);
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(frame);
+    };
+  }, [autoPan, viewerGeneration]);
+
+  useEffect(() => {
+    const viewer = viewerRef.current;
     if (!viewer?.viewport) return;
     const viewport = viewer.viewport as MotionAwareViewport;
     const animationTime = reduceMotion ? 0 : 0.8;
@@ -620,9 +761,11 @@ export function TapestryViewer({
   }, [reduceMotion, viewerGeneration]);
 
   const zoom = useCallback((factor: number) => {
+    contextRef.current.onAutoPanPause?.();
     const viewer = viewerRef.current;
     if (!viewer?.viewport) return;
     exploringRef.current = true;
+    relaxingRef.current = false;
     viewer.viewport.zoomBy(factor, undefined, contextRef.current.reduceMotion).applyConstraints(
       contextRef.current.reduceMotion,
     );
@@ -630,8 +773,46 @@ export function TapestryViewer({
     if (viewport) contextRef.current.onExplore(clamp(viewport.x + viewport.width / 2));
   }, []);
 
+  const leaveImmersion = useCallback(() => {
+    contextRef.current.onAutoPanPause?.();
+    const viewer = viewerRef.current;
+    const OpenSeadragon = runtimeRef.current;
+    const item = viewer?.world.getItemAt(0);
+    if (!viewer?.viewport || !OpenSeadragon || !item) return;
+    const image = item.getBounds(true);
+    const view = viewer.viewport.getBounds(true);
+    const container = viewer.viewport.getContainerSize();
+    const stage = elementRef.current?.closest('.explorer-stage');
+    const { fill, anchor } = contextSpace(elementRef.current, container.y);
+    const height = image.height / fill;
+    const width = height * container.x / Math.max(1, container.y);
+    const centerX = clamp(view.x + view.width / 2, image.x, image.x + image.width);
+    exploringRef.current = true;
+    relaxingRef.current = true;
+    contextAnchorRef.current = anchor;
+    (viewer as PanAwareViewer).visibilityRatio = 0.5;
+    immersiveRef.current = false;
+    setImmersive(false);
+    contextRef.current.onImmersiveChange?.(false);
+    const current = viewportForViewer(viewer, contextRef.current);
+    if (current) contextRef.current.onExplore(clamp(current.x + current.width / 2));
+    viewer.viewport.fitBounds(
+      new OpenSeadragon.Rect(centerX - width / 2, image.y + image.height / 2 - height * anchor, width, height),
+      contextRef.current.reduceMotion,
+    );
+    // The X disappears after activation; keep keyboard focus somewhere useful.
+    stage?.querySelector<HTMLButtonElement>('.home-button')?.focus({ preventScroll: true });
+  }, []);
+
+  useEffect(() => { relaxRef.current = leaveImmersion; }, [leaveImmersion]);
+
   return (
     <div className="tapestry-canvas-wrap" aria-busy={loading}>
+      {immersive && mode !== 'overview' ? (
+        <button aria-label="Leave close-up — show title and navigation" className="exit-closeup" onClick={leaveImmersion} type="button">
+          <X aria-hidden="true" />
+        </button>
+      ) : null}
       <section
         aria-label={
           scene && mode !== 'overview'
@@ -648,7 +829,7 @@ export function TapestryViewer({
           <legend className="sr-only">Image viewing controls</legend>
           <button aria-label="Zoom in" onClick={() => zoom(1.45)} type="button"><Plus aria-hidden="true" /></button>
           <button aria-label="Zoom out" onClick={() => zoom(1 / 1.45)} type="button"><Minus aria-hidden="true" /></button>
-          <button aria-label="Fit current scene" onClick={() => fitRef.current()} type="button"><Focus aria-hidden="true" /></button>
+          <button aria-label="Fit current scene" onClick={() => { contextRef.current.onAutoPanPause?.(); fitRef.current(); }} type="button"><Focus aria-hidden="true" /></button>
         </fieldset>
       ) : null}
       {loading ? (

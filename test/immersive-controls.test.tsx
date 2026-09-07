@@ -34,4 +34,19 @@ describe('immersive edge controls', () => {
     unmount();
     expect(vi.getTimerCount()).toBe(0);
   });
+
+  it('keeps the neutral view visible and hides both edges on entering close-up', async () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(() => useImmersiveControls(false));
+    await act(async () => { vi.advanceTimersByTime(10000); });
+    fireEvent.pointerMove(window, {clientX:300,clientY:300});
+    expect(result.current.edges).toEqual({top:true,bottom:true});
+    act(() => result.current.setImmersive(true));
+    expect(result.current.edges).toEqual({top:false,bottom:false});
+    act(() => result.current.reveal());
+    act(() => result.current.setImmersive(false));
+    await act(async () => { vi.advanceTimersByTime(10000); });
+    expect(result.current.edges).toEqual({top:true,bottom:true});
+    expect(vi.getTimerCount()).toBe(0);
+  });
 });

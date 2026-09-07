@@ -3,12 +3,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 /** Edge reveal uses viewport coordinates: the image never resizes with its controls. */
-export function useImmersiveControls() {
-  const [edges, setEdges] = useState({ top: true, bottom: true });
+export function useImmersiveControls(initialImmersive = true) {
+  const [controls, setControls] = useState({ immersive: initialImmersive, edges: { top: true, bottom: true } });
+  const { immersive, edges } = controls;
   const timer = useRef<number | undefined>(undefined);
-  const hide = useCallback(() => setEdges({ top: false, bottom: false }), []);
+  const hide = useCallback(() => setControls((current) => current.immersive
+    ? { ...current, edges: { top: false, bottom: false } }
+    : current), []);
+  const setImmersive = useCallback((next: boolean) => {
+    window.clearTimeout(timer.current);
+    setControls((current) => current.immersive === next ? current : {
+      immersive: next, edges: { top: !next, bottom: !next },
+    });
+  }, []);
 
   useEffect(() => {
+    window.clearTimeout(timer.current);
+    if (!immersive) return;
     timer.current = window.setTimeout(hide, 2200);
     const pointer = (event: PointerEvent) => {
       if (event.pointerType === 'touch') return;
@@ -19,10 +30,11 @@ export function useImmersiveControls() {
       const zoomBridge = event.clientX > window.innerWidth - 180 && event.clientY < 180;
       const top = event.clientY < 72 || zoomBridge || !!target?.closest('.explorer-header, .image-controls');
       const bottom = event.clientY > window.innerHeight - 100 || !!target?.closest('.bottom-chrome, [data-slot="select-content"]');
-      setEdges((previous) => previous.top === top && previous.bottom === bottom ? previous : { top, bottom });
+      setControls((current) => current.edges.top === top && current.edges.bottom === bottom
+        ? current : { ...current, edges: { top, bottom } });
     };
     const keyboard = (event: KeyboardEvent) => {
-      if (event.key === 'Tab') { window.clearTimeout(timer.current); setEdges({ top: true, bottom: true }); }
+      if (event.key === 'Tab') { window.clearTimeout(timer.current); setControls((current) => ({...current, edges: { top: true, bottom: true }})); }
     };
     window.addEventListener('pointermove', pointer, { passive: true });
     window.addEventListener('keydown', keyboard);
@@ -31,13 +43,13 @@ export function useImmersiveControls() {
       window.removeEventListener('pointermove', pointer);
       window.removeEventListener('keydown', keyboard);
     };
-  }, [hide]);
+  }, [hide, immersive]);
 
   const reveal = useCallback(() => {
     window.clearTimeout(timer.current);
-    setEdges({ top: true, bottom: true });
-    timer.current = window.setTimeout(hide, 4000);
-  }, [hide]);
+    setControls((current) => ({...current, edges: { top: true, bottom: true }}));
+    if (immersive) timer.current = window.setTimeout(hide, 4000);
+  }, [hide, immersive]);
 
-  return { edges, reveal };
+  return { immersive, edges, reveal, setImmersive };
 }

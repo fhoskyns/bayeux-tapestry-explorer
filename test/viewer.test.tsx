@@ -24,6 +24,7 @@ const osd = vi.hoisted(() => {
     overlays: HTMLElement[] = [];
     opened = false;
     panVertical = false;
+    visibilityRatio = 1;
     drawer: { canvas: HTMLCanvasElement } | undefined;
     fullyLoaded = true;
     viewBounds = { x: 0, y: 0, width: 1, height: 1 };
@@ -44,6 +45,7 @@ const osd = vi.hoisted(() => {
       fitBounds: vi.fn(),
       resize: vi.fn(),
       zoomBy: vi.fn(() => this.zoomResult),
+      panBy: vi.fn(),
       getBounds: () => this.viewBounds,
       centerSpringX: { animationTime: 0.8 },
       centerSpringY: { animationTime: 0.8, current: { value: 0.5 }, target: { value: 0.6 }, resetTo: vi.fn() },
@@ -116,6 +118,98 @@ async function initializedViewer() {
 }
 
 describe('real tapestry viewer', () => {
+  function animationClock() {
+    let nextId = 1;
+    const frames = new Map<number, FrameRequestCallback>();
+    const request = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      const id = nextId++;
+      frames.set(id, callback);
+      return id;
+    });
+    const cancel = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation((id) => { frames.delete(id); });
+    const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
+    return {
+      frames,
+      cancel,
+      step(time: number) {
+        const pending = [...frames.values()];
+        frames.clear();
+        act(() => pending.forEach((callback) => callback(time)));
+      },
+      restore() { request.mockRestore(); cancel.mockRestore(); hidden.mockRestore(); },
+    };
+  }
+
+  it('never auto-pans unless opted in, caps elapsed time, and cancels on off or unmount', async () => {
+    const clock = animationClock();
+    const props = { ...viewerProps(), dziUrl: 'https://tiles.example/v1/tapestry.dzi', onAutoPanPause: vi.fn() };
+    const view = render(<TapestryViewer {...props} />);
+    try {
+      const viewer = await initializedViewer();
+      viewer.viewBounds = { x: 0.2, y: 0.1, width: 0.2, height: 0.2 };
+      act(() => { viewer.emit('open'); viewer.emit('update-viewport'); });
+      clock.step(1000);
+      expect(viewer.viewport.panBy).not.toHaveBeenCalled();
+      expect(clock.frames.size).toBe(0);
+
+      view.rerender(<TapestryViewer {...props} autoPan />);
+      clock.step(2000);
+      expect(viewer.viewport.panBy).not.toHaveBeenCalled();
+      clock.step(2100);
+      expect(viewer.viewport.panBy).toHaveBeenCalledExactlyOnceWith(
+        { x: 0.2 * 28 / 1200 * 0.05, y: 0 }, true,
+      );
+      expect(props.onAutoPanPause).not.toHaveBeenCalled();
+      expect(clock.frames.size).toBe(1);
+
+      view.rerender(<TapestryViewer {...props} autoPan={false} />);
+      expect(clock.frames.size).toBe(0);
+      clock.step(3000);
+      expect(viewer.viewport.panBy).toHaveBeenCalledOnce();
+      view.rerender(<TapestryViewer {...props} autoPan />);
+      expect(clock.frames.size).toBe(1);
+      view.unmount();
+      expect(clock.frames.size).toBe(0);
+      expect(clock.cancel).toHaveBeenCalled();
+    } finally { view.unmount(); clock.restore(); }
+  });
+
+  it('stops auto-pan at the right image edge without scheduling another frame', async () => {
+    const clock = animationClock();
+    const props = { ...viewerProps(), onAutoPanPause: vi.fn() };
+    const view = render(<TapestryViewer {...props} autoPan />);
+    try {
+      const viewer = await initializedViewer();
+      viewer.viewBounds = { x: 0.8, y: 0.1, width: 0.2, height: 0.2 };
+      act(() => { viewer.emit('open'); viewer.emit('update-viewport'); });
+      clock.step(1000);
+      expect(props.onAutoPanPause).toHaveBeenCalledOnce();
+      expect(viewer.viewport.panBy).not.toHaveBeenCalled();
+      expect(clock.frames.size).toBe(0);
+    } finally { view.unmount(); clock.restore(); }
+  });
+
+  it('pauses auto-pan for manual canvas gestures and image controls', async () => {
+    const clock = animationClock();
+    const props = { ...viewerProps(), onAutoPanPause: vi.fn() };
+    const view = render(<TapestryViewer {...props} autoPan />);
+    try {
+      const viewer = await initializedViewer();
+      viewer.viewBounds = { x: 0.2, y: 0.1, width: 0.2, height: 0.2 };
+      act(() => { viewer.emit('open'); viewer.emit('update-viewport'); });
+      for (const name of ['canvas-drag', 'canvas-scroll', 'canvas-pinch', 'canvas-double-click', 'canvas-key']) {
+        props.onAutoPanPause.mockClear();
+        act(() => viewer.emit(name, { originalEvent: { code: 'ArrowRight' } }));
+        expect(props.onAutoPanPause, name).toHaveBeenCalledOnce();
+      }
+      for (const name of ['Zoom in', 'Zoom out', 'Fit current scene', 'Leave close-up — show title and navigation']) {
+        props.onAutoPanPause.mockClear();
+        fireEvent.click(screen.getByRole('button', { name }));
+        expect(props.onAutoPanPause, name).toHaveBeenCalledOnce();
+      }
+    } finally { view.unmount(); clock.restore(); }
+  });
+
   beforeEach(() => {
     osd.instances.length = 0;
     osd.runtime.mockClear();
@@ -150,7 +244,7 @@ describe('real tapestry viewer', () => {
     expect(viewer.open).toHaveBeenCalledOnce();
     expect(viewer.destroy).not.toHaveBeenCalled();
     expect(viewer.viewport.zoomSpring.animationTime).toBe(0);
-    expect(screen.getByRole('button', { name: /note 1, observation: the enthroned king/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /note 1a, observation: the enthroned king/i })).toBeInTheDocument();
   });
 
   it('fills portrait height without stretching the image and keeps Overview as the entire strip', async () => {
@@ -232,7 +326,7 @@ describe('real tapestry viewer', () => {
     render(<TapestryViewer {...props} />);
     const viewer = await initializedViewer();
     act(() => { viewer.emit('open'); viewer.emit('update-viewport'); });
-    const marker = screen.getByRole('button', { name: /note 1, observation: the enthroned king/i });
+    const marker = screen.getByRole('button', { name: /note 1a, observation: the enthroned king/i });
     const canvasClick = vi.fn();
     viewer.element.addEventListener('click', canvasClick);
 
@@ -262,7 +356,7 @@ describe('real tapestry viewer', () => {
 
     expect(screen.queryByText(/some image data could not be loaded/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /retry image/i })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /note 1, observation: the enthroned king/i })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /note 1a, observation: the enthroned king/i })).toBeEnabled();
   });
 
   it('reports exhausted tile retries, keeps overlays usable, and clears only recovered failures', async () => {
@@ -275,7 +369,7 @@ describe('real tapestry viewer', () => {
     expect(screen.queryByRole('button', { name: /retry image/i })).not.toBeInTheDocument();
     act(() => viewer.emit('tile-load-failed', { tile: failedTile, maxReached: true }));
     expect(screen.getByRole('button', { name: /retry image/i })).toBeEnabled();
-    const marker = screen.getByRole('button', { name: /note 1, observation: the enthroned king/i });
+    const marker = screen.getByRole('button', { name: /note 1a, observation: the enthroned king/i });
     fireEvent.click(marker);
     expect(props.onAnnotationActivate).toHaveBeenCalledWith(annotation, marker);
 
@@ -384,6 +478,112 @@ describe('real tapestry viewer', () => {
     expect(props.onExplore).toHaveBeenCalledOnce();
     act(() => viewer.emit('animation-finish'));
     expect(props.onExplore).toHaveBeenCalledTimes(2);
+  });
+
+  it('shows chapter-letter labels without changing annotation URL IDs', async () => {
+    render(<TapestryViewer {...viewerProps()} scene={tapestryManifest.scenes[31]} />);
+    const viewer = await initializedViewer();
+    act(() => { viewer.emit('open'); viewer.emit('update-viewport'); });
+    for (const [index, label] of ['32a', '32b'].entries()) {
+      const marker = screen.getByRole('button', { name: new RegExp(`^Note ${label},`) });
+      expect(marker.querySelector('.annotation-marker__dot')).toHaveTextContent(label);
+      expect(marker).toHaveAttribute('data-annotation-id', tapestryManifest.scenes[31].annotations[index].id);
+    }
+  });
+
+  it('uses a stable zoom threshold with hysteresis and hides the exit in Overview', async () => {
+    const onImmersiveChange = vi.fn();
+    const props = { ...viewerProps(), dziUrl: 'https://tiles.example/v1/tapestry.dzi', onImmersiveChange };
+    const view = render(<TapestryViewer {...props} />);
+    const viewer = await initializedViewer();
+    act(() => { viewer.emit('open'); viewer.emit('update-viewport'); });
+    expect(screen.queryByRole('button', {name:/leave close-up/i})).not.toBeInTheDocument();
+    viewer.viewBounds.height = 0.5 / 0.91;
+    act(() => viewer.emit('viewport-change'));
+    expect(onImmersiveChange).toHaveBeenLastCalledWith(true);
+    expect(screen.getByRole('button', {name:/leave close-up/i})).toBeInTheDocument();
+    viewer.viewBounds.height = 0.5 / 0.87;
+    act(() => viewer.emit('viewport-change'));
+    expect(onImmersiveChange).toHaveBeenCalledTimes(1);
+    viewer.viewBounds.height = 0.5 / 0.83;
+    act(() => viewer.emit('viewport-change'));
+    expect(onImmersiveChange).toHaveBeenLastCalledWith(false);
+    viewer.viewBounds.height = 0.5 / 1.2;
+    act(() => viewer.emit('viewport-change'));
+    view.rerender(<TapestryViewer {...props} mode="overview" scene={null} />);
+    expect(screen.queryByRole('button', {name:/leave close-up/i})).not.toBeInTheDocument();
+    expect(onImmersiveChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it.each([false, true])('backs out locally, retains horizontal center and respects reduced motion (%s)', async (reduceMotion) => {
+    const onImmersiveChange = vi.fn();
+    render(<TapestryViewer {...viewerProps()} reduceMotion={reduceMotion} onImmersiveChange={onImmersiveChange} />);
+    const viewer = await initializedViewer();
+    viewer.item.getBounds = () => ({x:0,y:0,width:100,height:0.5});
+    viewer.viewBounds = {x:19.85,y:0.15,width:0.3,height:0.2};
+    act(() => { viewer.emit('open'); viewer.emit('update-viewport'); });
+    viewer.viewport.fitBounds.mockClear();
+    fireEvent.click(screen.getByRole('button', {name:/leave close-up/i}));
+    expect(viewer.viewport.goHome).not.toHaveBeenCalled();
+    const [bounds, immediate] = viewer.viewport.fitBounds.mock.calls[0];
+    expect(bounds.x + bounds.width / 2).toBeCloseTo(20);
+    expect(bounds.height).toBeCloseTo(0.5 / 0.6);
+    expect(bounds.y + bounds.height * 0.49).toBeCloseTo(0.25);
+    expect(immediate).toBe(reduceMotion);
+    expect(onImmersiveChange).toHaveBeenLastCalledWith(false);
+    expect(viewer.open).toHaveBeenCalledOnce();
+    // A new wheel gesture can enter close-up even if an immediate fit emitted
+    // no animation-finish event to clear the outgoing animation guard.
+    act(() => { viewer.emit('canvas-scroll'); viewer.emit('viewport-change'); });
+    expect(onImmersiveChange).toHaveBeenLastCalledWith(true);
+  });
+
+  it.each([0.2, 99.8])('preserves the chapter at an image edge (%s), with white margin allowed', async (center) => {
+    const props = {...viewerProps(), dziUrl:'https://tiles.example/v1/tapestry.dzi'};
+    render(<TapestryViewer {...props} />);
+    const viewer = await initializedViewer();
+    viewer.item.getBounds = () => ({x:0,y:0,width:100,height:0.5});
+    viewer.viewBounds = {x:center - 0.15,y:0,width:0.3,height:0.2};
+    act(() => {viewer.emit('open'); viewer.emit('update-viewport');});
+    viewer.viewport.fitBounds.mockClear();
+    fireEvent.click(screen.getByRole('button',{name:/leave close-up/i}));
+    const [bounds] = viewer.viewport.fitBounds.mock.calls[0];
+    expect(bounds.x + bounds.width / 2).toBeCloseTo(center);
+    expect(viewer.visibilityRatio).toBe(0.5);
+  });
+
+  it('retains an edge-centered context viewport in the shareable state', async () => {
+    const props = {...viewerProps(), dziUrl:'https://tiles.example/v1/tapestry.dzi'};
+    render(<TapestryViewer {...props} />);
+    const viewer = await initializedViewer();
+    viewer.imageBounds = {x:-400,y:-400,width:1200,height:3500};
+    act(() => {viewer.emit('open'); viewer.emit('update-viewport');});
+    expect(props.onViewportChange).toHaveBeenLastCalledWith({
+      x:-400/3840,y:0,width:1200/3840,height:1,framing:'context',
+    });
+  });
+
+  it('fits above a tall footer on short screens, without recentering behind the controls', async () => {
+    const props = {...viewerProps(), mode:'free' as const};
+    const view = render(<div className="explorer-stage"><header className="explorer-header" /><div className="bottom-chrome" /><TapestryViewer {...props} /></div>);
+    view.container.querySelector('.explorer-header')!.getBoundingClientRect = () => ({height:80} as DOMRect);
+    view.container.querySelector('.bottom-chrome')!.getBoundingClientRect = () => ({height:220} as DOMRect);
+    const viewer = await initializedViewer();
+    viewer.viewport.getContainerSize = () => ({x:844,y:400});
+    viewer.item.getBounds = () => ({x:0,y:0,width:100,height:0.5});
+    viewer.viewBounds = {x:19.85,y:0.15,width:0.3,height:0.2};
+    act(() => {viewer.emit('open'); viewer.emit('update-viewport');});
+    viewer.viewport.fitBounds.mockClear();
+    fireEvent.click(screen.getByRole('button',{name:/leave close-up/i}));
+    const [bounds] = viewer.viewport.fitBounds.mock.calls[0];
+    const top = -bounds.y / bounds.height * 400;
+    const bottom = (0.5 - bounds.y) / bounds.height * 400;
+    expect(top).toBeCloseTo(96);
+    expect(bottom).toBeCloseTo(148);
+    viewer.viewBounds = bounds;
+    act(() => viewer.emit('viewport-change'));
+    expect(viewer.panVertical).toBe(false);
+    expect(viewer.viewport.centerSpringY.resetTo).toHaveBeenLastCalledWith(bounds.y + bounds.height/2);
   });
 
 });

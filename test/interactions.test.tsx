@@ -12,7 +12,9 @@ vi.mock('@/lib/satellite-flight', () => ({
 }));
 
 vi.mock('@/components/tapestry-viewer', () => ({
-  TapestryViewer: ({ initialViewport, mode, onExplore, onViewportChange, reduceMotion, scene }: {
+  TapestryViewer: ({ autoPan, onAutoPanPause, initialViewport, mode, onExplore, onViewportChange, reduceMotion, scene }: {
+    autoPan?: boolean;
+    onAutoPanPause?: () => void;
     initialViewport?: { x: number; y: number; width: number; height: number } | null;
     mode: string;
     onExplore: (fraction: number) => void;
@@ -23,12 +25,14 @@ vi.mock('@/components/tapestry-viewer', () => ({
     <div
       data-initial-viewport={initialViewport ? JSON.stringify(initialViewport) : ''}
       data-mode={mode}
+      data-auto-pan={String(Boolean(autoPan))}
       data-reduce-motion={String(reduceMotion)}
       data-testid="mock-viewer"
       data-viewer-canvas="true"
     >
       <span>{scene ? `viewer scene ${scene.id}` : 'viewer overview'}</span>
       <button onClick={() => onExplore(0.52)} type="button">Simulate a pan</button>
+      <button onClick={onAutoPanPause} type="button">Simulate manual interruption</button>
       <button
         onClick={() => onViewportChange({ x: 0.25, y: 0.1, width: 0.05, height: 0.8 })}
         type="button"
@@ -72,6 +76,43 @@ describe('guided tour interactions', () => {
     expect(composeDziUrl('https://bayeux-tiles.example.workers.dev', path)).toBe(
       'https://bayeux-tiles.example.workers.dev/v1/bayeux-tapestry/bayeux-tapestry.dzi',
     );
+  });
+
+  it('keeps auto-pan off by default, starts at scene 01 when enabled, and permits switching off', () => {
+    render(<TapestryExplorer manifest={tapestryManifest} />);
+    const toggle = screen.getByRole('switch', { name: 'Auto-pan along the tapestry' });
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByTestId('mock-viewer')).toHaveAttribute('data-auto-pan', 'false');
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByText('viewer scene 01')).toBeInTheDocument();
+    expect(screen.getByTestId('mock-viewer')).toHaveAttribute('data-auto-pan', 'true');
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByTestId('mock-viewer')).toHaveAttribute('data-auto-pan', 'false');
+  });
+
+  it('pauses auto-pan on manual interruption, navigation, reading, and history restoration', () => {
+    window.history.replaceState(null, '', '/?scene=01');
+    render(<TapestryExplorer manifest={tapestryManifest} />);
+    const toggle = screen.getByRole('switch', { name: 'Auto-pan along the tapestry' });
+    fireEvent.click(toggle);
+    fireEvent.click(screen.getByRole('button', { name: 'Simulate manual interruption' }));
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
+    fireEvent.click(toggle);
+    fireEvent.click(screen.getByRole('button', { name: 'Next scene' }));
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
+    fireEvent.click(toggle);
+    fireEvent.click(screen.getByRole('button', { name: 'Read this scene' }));
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
+    fireEvent.click(screen.getByRole('button', { name: 'Close scene reading' }));
+    fireEvent.click(toggle);
+    act(() => {
+      window.history.replaceState(null, '', '/?scene=07');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByText('viewer scene 07')).toBeInTheDocument();
   });
 
   it('uses the containing scene, including uneven divisions and the final edge', () => {
@@ -173,7 +214,7 @@ describe('guided tour interactions', () => {
     expect(await screen.findByText(scene.latinInscription)).toBeInTheDocument();
     expect(screen.getByText(scene.englishTranslation)).toBeInTheDocument();
     expect(screen.getByTestId('mock-viewer').querySelector('canvas, img')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: /01 the enthroned king/i }));
+    fireEvent.click(screen.getByRole('button', { name: /1a the enthroned king/i }));
     expect(screen.getByText(annotation.commentary)).toBeInTheDocument();
     const source = tapestryManifest.sources.find((entry) => entry.id === annotation.sourceIds[0]);
     expect(source).toBeDefined();
@@ -249,6 +290,18 @@ describe('guided tour interactions', () => {
     expect(await screen.findByRole('heading', { name: 'The English Flee' })).toBeInTheDocument();
   });
 
+  it('restores edge margins only for explicitly valid context framing', () => {
+    window.history.replaceState(null, '', '/?scene=01&mode=free&x=-0.01&y=0&w=0.04&h=1&framing=context');
+    render(<TapestryExplorer manifest={tapestryManifest} />);
+    expect(screen.getByTestId('mock-viewer')).toHaveAttribute('data-initial-viewport', JSON.stringify({x:-0.01,y:0,width:0.04,height:1,framing:'context'}));
+    expect(window.location.search).toContain('framing=context');
+    act(() => {
+      window.history.replaceState(null, '', '/?scene=01&mode=free&x=-0.8&y=0&w=0.04&h=1&framing=context');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+    expect(screen.getByTestId('mock-viewer')).toHaveAttribute('data-mode', 'guided');
+  });
+
   it('restores and updates a normalized free-exploration viewport', async () => {
     window.history.replaceState(null, '', '/?scene=32&mode=free&x=0.4&y=0.1&w=0.03&h=0.8');
     render(<TapestryExplorer manifest={tapestryManifest} />);
@@ -291,7 +344,7 @@ describe('guided tour interactions', () => {
     render(<TapestryExplorer manifest={tapestryManifest} />);
     fireEvent.click(screen.getByRole('button', { name: /start the tour/i }));
     fireEvent.click(screen.getByText('Read this scene'));
-    const noteButton = await screen.findByRole('button', { name: /01 the enthroned king/i });
+    const noteButton = await screen.findByRole('button', { name: /1a the enthroned king/i });
     fireEvent.click(noteButton);
     expect(screen.getByText(tapestryManifest.scenes[0].annotations[0].commentary)).toBeInTheDocument();
 

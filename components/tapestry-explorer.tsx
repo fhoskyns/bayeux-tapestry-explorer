@@ -16,12 +16,14 @@ import Image from 'next/image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogClose, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { TapestryViewer, type ViewerViewport } from '@/components/tapestry-viewer';
 import { hasSeenArrival, rememberArrival, TapestryArrival } from '@/components/tapestry-arrival';
 import type { Annotation, Scene, TapestryManifest } from '@/lib/tapestry-schema';
 import { preloadSceneImages } from '@/lib/image-preload';
 import { useImmersiveControls } from '@/lib/use-immersive-controls';
+import { annotationLabel } from '@/lib/annotation-label';
 
 const MASTER_WIDTH = 482096;
 const OVERVIEW_IMAGE =
@@ -46,13 +48,16 @@ function validViewport(params: URLSearchParams): ViewerViewport | null {
   const values = ['x', 'y', 'w', 'h'].map((key) => Number(params.get(key)));
   if (values.some((value) => !Number.isFinite(value))) return null;
   const [x, y, width, height] = values;
+  const framing = params.get('framing') === 'context' ? 'context' : undefined;
   if (
-    x < 0 || x > 1 || y < 0 || y > 1 || width <= 0 || width > 1 || height <= 0 || height > 1 ||
-    x + width > 1 || y + height > 1
+    y < 0 || y > 1 || width <= 0 || width > 1 || height <= 0 || height > 1 || y + height > 1 ||
+    (framing
+      ? height !== 1 || x + width / 2 < 0 || x + width / 2 > 1
+      : x < 0 || x + width > 1)
   ) {
     return null;
   }
-  return { x, y, width, height };
+  return { x, y, width, height, ...(framing ? {framing} : {}) };
 }
 
 export function nearestScene(scenes: Scene[], fraction: number) {
@@ -168,7 +173,9 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
   const [arrivalActive, setArrivalActive] = useState(false);
   const [scenePickerOpen, setScenePickerOpen] = useState(false);
   const [readingOpen, setReadingOpen] = useState(false);
-  const { edges, reveal } = useImmersiveControls();
+  const [autoPan, setAutoPan] = useState(false);
+  const pauseAutoPan = useCallback(() => setAutoPan(false), []);
+  const { immersive, edges, reveal, setImmersive } = useImmersiveControls(false);
   const initializedRef = useRef(false);
   const annotationTriggerRef = useRef<HTMLElement | null>(null);
   const annotationPanelRef = useRef<HTMLDialogElement | null>(null);
@@ -196,6 +203,7 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
   }, []);
 
   const openScene = useCallback((nextScene: Scene) => {
+    setAutoPan(false);
     setSceneId(nextScene.id);
     setMode('guided');
     setActiveAnnotation(null);
@@ -205,6 +213,8 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
   }, []);
 
   const goOverview = useCallback(() => {
+    setAutoPan(false);
+    setImmersive(false);
     setReadingOpen(false);
     setMode('overview');
     setSceneId(null);
@@ -212,7 +222,7 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
     setViewport(null);
     setInitialViewport(null);
     window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
-  }, [reduceMotion]);
+  }, [reduceMotion, setImmersive]);
 
   useEffect(() => {
     const media = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -232,6 +242,7 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
 
   useEffect(() => {
     const restoreFromUrl = (firstLoad = false) => {
+      setAutoPan(false);
       setReadingOpen(false);
       const params = new URLSearchParams(window.location.search);
       const requestedScene = validSceneId(params.get('scene'));
@@ -302,6 +313,7 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
         params.set('y', viewport.y.toFixed(6));
         params.set('w', viewport.width.toFixed(6));
         params.set('h', viewport.height.toFixed(6));
+        if (viewport.framing) params.set('framing', viewport.framing);
       }
     }
     if (activeAnnotation) params.set('annotation', activeAnnotation.id);
@@ -380,6 +392,7 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
   }, [activeAnnotation, restoreAnnotationFocus, wideLayout]);
 
   const activateAnnotation = useCallback((annotation: Annotation, trigger: HTMLElement) => {
+    setAutoPan(false);
     annotationTriggerRef.current = readingOpen ? readingTriggerRef.current : trigger;
     setReadingOpen(false);
     setActiveAnnotation(annotation);
@@ -392,7 +405,7 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
   }, [activeAnnotation, restoreAnnotationFocus]);
 
   const enterFreeExploration = useCallback((centerFraction: number) => {
-    if (mode === 'overview') return;
+    if (mode === 'overview' && !dziUrl) return;
     if (dziUrl) {
       const nextScene = nearestScene(scenes, centerFraction);
       setSceneId(nextScene.id);
@@ -421,9 +434,9 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
 
   return (
     <>
-    <Dialog open={readingOpen && !!scene} onOpenChange={setReadingOpen}>
+    <Dialog open={readingOpen && !!scene} onOpenChange={(open) => { setReadingOpen(open); if (open) pauseAutoPan(); }}>
     <main className="explorer" inert={arrivalActive ? true : undefined}>
-      <div className="explorer-stage" data-top-open={edges.top} data-bottom-open={edges.bottom || scenePickerOpen}>
+      <div className="explorer-stage" data-immersive={immersive && mode !== 'overview'} data-top-open={edges.top} data-bottom-open={edges.bottom || scenePickerOpen}>
         <header className="explorer-header">
           <h1>
             <a href="/" onClick={(event) => { event.preventDefault(); goOverview(); }}>
@@ -441,6 +454,8 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
           <div className={`viewer-workspace ${activeAnnotation ? 'has-annotation' : ''}`}>
             <div className="viewer-frame" data-mode={mode}>
               <TapestryViewer
+                autoPan={autoPan}
+                onAutoPanPause={pauseAutoPan}
                 activeAnnotationId={activeAnnotation?.id}
                 dziUrl={dziUrl}
                 initialViewport={initialViewport}
@@ -449,6 +464,7 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
                 onExplore={enterFreeExploration}
                 onViewportChange={setViewport}
                 onCanvasTap={reveal}
+                onImmersiveChange={setImmersive}
                 reduceMotion={reduceMotion}
                 scene={scene}
               />
@@ -537,6 +553,20 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
               type="button"
             >{mode === 'overview' ? 'Start' : 'Next'}<ArrowRight aria-hidden="true" /></button>
           </nav>
+          <div className="exploration-actions">
+          <label aria-label="Auto-pan along the tapestry" className="auto-pan-control" htmlFor="auto-pan-toggle">
+            <Switch
+              id="auto-pan-toggle"
+              aria-label="Auto-pan along the tapestry"
+              checked={autoPan}
+              className="auto-pan-switch"
+              onCheckedChange={(checked) => {
+                if (checked && mode === 'overview') openScene(scenes[0]);
+                setAutoPan(checked);
+              }}
+            />
+            <span>Auto-pan</span>
+          </label>
           {mode === 'free' && scene ? (
             <button className="resume-link" onClick={() => openScene(scene)} type="button">
               <Compass aria-hidden="true" /> Resume at Scene {scene.id}
@@ -546,6 +576,7 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
           ) : (
             <p className="gesture-hint">{scene ? 'Drag to explore · tap the image to reveal controls' : 'Choose a scene below, or press Start'}</p>
           )}
+          </div>
         </div>
         <SceneNavigator activeScene={scene} mode={mode} onJump={openScene} scenes={scenes} viewport={viewport} />
         <footer className="explorer-footer">
@@ -600,7 +631,7 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
                   onClick={(event) => activateAnnotation(annotation, event.currentTarget)}
                   type="button"
                 >
-                  <span>{String(index + 1).padStart(2, '0')}</span>
+                  <span>{annotationLabel(annotation.sceneId, index)}</span>
                   <strong>{annotation.title}</strong>
                   <small>{annotation.category}{annotation.disputed ? ' · disputed' : ''}</small>
                 </button>

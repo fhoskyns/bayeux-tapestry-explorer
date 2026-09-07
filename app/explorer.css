@@ -55,6 +55,12 @@
 .resume-link { min-height: 44px; margin-top: -4px; font-size: 14px; text-underline-offset: 4px; }
 .resume-link:hover { text-decoration: underline; }
 .resume-link svg { width: 14px; height: 14px; margin-right: 6px; }
+.exploration-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0 18px; }
+.auto-pan-control { display: inline-flex; min-height: 44px; align-items: center; gap: 10px; padding-inline: 6px; color: var(--quiet); font-size: 12px; cursor: pointer; }
+.explorer .auto-pan-switch { background: #d8d6d2; }
+.explorer .auto-pan-switch[data-checked] { background: var(--ink); }
+.auto-pan-switch [data-slot='switch-thumb'] { background: #fff; }
+.exploration-actions .resume-link, .exploration-actions .gesture-hint { margin: 0; }
 .explorer .tapestry-navigator { position: relative; border: 0; background: #fff; margin: 0 40px; padding: 0; }
 .explorer .navigator-hit-area { position: relative; display: flex; height: 44px; min-height: 44px; align-items: center; padding: 0; cursor: crosshair; }
 .explorer .navigator-strip { position: relative; width: 100%; height: auto; min-height: 0; overflow: visible; background: transparent; }
@@ -88,8 +94,8 @@
 .explorer .annotation-sources strong, .explorer .annotation-sources span { font-size: 14px; }
 .explorer .annotation-marker { z-index: 4; }
 .explorer .annotation-marker:has(.annotation-marker__preview:hover), .explorer .annotation-marker:hover, .explorer .annotation-marker:focus-visible { z-index: 6; }
-.explorer .annotation-marker__dot { width: 22px; height: 22px; border: 1px solid #fff; background: #ffffffeb; color: var(--oxblood); font-size: 12px; box-shadow: 0 2px 10px #0003; }
-.explorer .annotation-marker:hover .annotation-marker__dot, .explorer .annotation-marker:focus-visible .annotation-marker__dot, .explorer .annotation-marker.is-active .annotation-marker__dot { background: var(--oxblood); color: #fff; }
+.explorer .annotation-marker__dot { width: 34px; height: 34px; border: 1px solid #fff; background: #ffffffeb; color: var(--oxblood); font-size: 12px; font-variant-numeric: tabular-nums; box-shadow: 0 2px 10px #0003; }
+.explorer .annotation-marker:hover .annotation-marker__dot, .explorer .annotation-marker:focus-visible .annotation-marker__dot, .explorer .annotation-marker.is-active .annotation-marker__dot { width: 42px; height: 42px; background: var(--oxblood); color: #fff; }
 .explorer .annotation-marker__preview { width: min(270px, 76vw); border: 1px solid var(--line); border-radius: 12px; background: #fff; color: var(--ink); padding: 16px; box-shadow: 0 8px 30px #0002; }
 .explorer .annotation-marker__preview strong { color: var(--ink); font-size: 17px; }
 .explorer .annotation-marker__preview > span { color: var(--quiet); font-size: 14px; line-height: 1.5; }
@@ -159,6 +165,11 @@
 .reading-close svg { width: 18px; }
 .explorer .image-provenance { display: none; }
 .explorer .annotation-panel { z-index: 70; }
+.exit-closeup { position: absolute; z-index: 25; top: max(16px, env(safe-area-inset-top)); left: max(16px, env(safe-area-inset-left)); display: grid; width: 44px; height: 44px; place-items: center; border: 1px solid #e8e8e8; border-radius: 50%; background: #fffffff2; color: var(--ink); box-shadow: 0 2px 12px #0001; cursor: pointer; }
+.exit-closeup svg { width: 20px; height: 20px; }
+.exit-closeup:hover { background: #fff; }
+.exit-closeup:focus-visible { outline: 3px solid var(--ochre); outline-offset: 3px; }
+.explorer-stage:has(.exit-closeup) .explorer-header { padding-inline: 72px; }
 @media (max-width: 600px) {
   .explorer-header { padding: max(18px, env(safe-area-inset-top)) 16px 24px; }
   .explorer .image-controls { top: 116px; right: 10px; }
