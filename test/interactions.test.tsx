@@ -9,8 +9,9 @@ import type { ComponentProps } from 'react';
 import type { TapestryGallery } from '@/components/tapestry-gallery';
 
 vi.mock('@/components/tapestry-gallery', () => ({
-  TapestryGallery: ({ autoPan, speed, closing, onClosed, onPrepareFlat }: ComponentProps<typeof TapestryGallery>) => (
-    <div data-testid="mock-gallery" data-auto-pan={String(autoPan)} data-auto-pan-speed={speed}>
+  TapestryGallery: ({ autoPan, speed, closing, onClosed, onPrepareFlat, onMove, cameraRequest }: ComponentProps<typeof TapestryGallery>) => (
+    <div data-testid="mock-gallery" data-auto-pan={String(autoPan)} data-auto-pan-speed={speed} data-camera-request={JSON.stringify(cameraRequest)}>
+      <button type="button" onClick={() => onMove({x: .25, y: -.2, width: .05, height: 1.4})}>Report gallery camera</button>
       {closing ? <button type="button" onClick={() => {
         onPrepareFlat({ x: .2, y: 0, width: .02, height: 1 });
         onClosed();
@@ -25,7 +26,7 @@ vi.mock('@/lib/satellite-flight', () => ({
 }));
 
 vi.mock('@/components/tapestry-viewer', () => ({
-  TapestryViewer: ({ autoPan, autoPanSpeed, onAutoPanPause, initialViewport, mode, onExplore, onViewportChange, reduceMotion, scene }: {
+  TapestryViewer: ({ autoPan, autoPanSpeed, onAutoPanPause, initialViewport, mode, onExplore, onViewportChange, onCameraChange, cameraRequest, reduceMotion, scene }: {
     autoPan?: boolean;
     autoPanSpeed?: number;
     onAutoPanPause?: () => void;
@@ -33,11 +34,14 @@ vi.mock('@/components/tapestry-viewer', () => ({
     mode: string;
     onExplore: (fraction: number) => void;
     onViewportChange: (viewport: { x: number; y: number; width: number; height: number }) => void;
+    onCameraChange?: (viewport: { x: number; y: number; width: number; height: number }) => void;
+    cameraRequest?: { x: number; y: number; width: number; height: number } | null;
     reduceMotion: boolean;
     scene: { id: string } | null;
   }) => (
     <div
       data-initial-viewport={initialViewport ? JSON.stringify(initialViewport) : ''}
+      data-camera-request={JSON.stringify(cameraRequest)}
       data-mode={mode}
       data-auto-pan={String(Boolean(autoPan))}
       data-auto-pan-speed={autoPanSpeed}
@@ -46,6 +50,7 @@ vi.mock('@/components/tapestry-viewer', () => ({
       data-viewer-canvas="true"
     >
       <span>{scene ? `viewer scene ${scene.id}` : 'viewer overview'}</span>
+      <button type="button" onClick={() => onCameraChange?.({x: .25, y: -.2, width: .05, height: 1.4})}>Report flat camera</button>
       <button onClick={() => onExplore(0.52)} type="button">Simulate a pan</button>
       <button onClick={onAutoPanPause} type="button">Simulate manual interruption</button>
       <button
@@ -102,7 +107,8 @@ describe('guided tour interactions', () => {
     expect(dialog.className).not.toContain('-translate-x-1/2');
     expect(dialog.className).not.toContain('-translate-y-1/2');
     expect(dialog).toHaveClass('translate-x-0', 'translate-y-0');
-    expect(screen.getByText('Project translation — draft, awaiting review.')).toBeInTheDocument();
+    expect(screen.getByText('Project translation')).toBeInTheDocument();
+    expect(screen.queryByText('Project translation — draft, awaiting review.')).not.toBeInTheDocument();
   });
 
   it('keeps auto-pan off by default, starts at scene 01 when enabled, and permits switching off', () => {
@@ -364,6 +370,35 @@ describe('guided tour interactions', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Simulate a pan' }));
     expect(screen.getByRole('button', { name: /resume at scene/i })).toBeInTheDocument();
     expect(window.location.search).toContain('mode=free');
+  });
+
+  it.each(['flat', 'gallery'])('navigator drag preserves the raw %s camera and pauses playback', (view) => {
+    vi.stubEnv('VITE_TAPESTRY_TILE_BASE_URL', 'https://tiles.example/v1');
+    window.history.replaceState(null, '', '/?scene=07');
+    const {container} = render(<TapestryExplorer manifest={tapestryManifest} />);
+    if (view === 'gallery') fireEvent.click(screen.getByRole('button', {name: 'Gallery'}));
+    fireEvent.click(screen.getByRole('button', {name: `Report ${view} camera`}));
+    fireEvent.click(screen.getByRole('button', {name: 'Play auto-pan'}));
+    const track = container.querySelector<HTMLElement>('.navigator-hit-area')!;
+    const border = container.querySelector<HTMLElement>('.navigator-window')!;
+    track.getBoundingClientRect = () => ({left: 0, width: 1000}) as DOMRect;
+    track.setPointerCapture = vi.fn();
+    track.hasPointerCapture = () => true;
+    const release = vi.fn();
+    track.releasePointerCapture = release;
+    fireEvent.pointerDown(border, {clientX: 260, button: 0});
+    expect(screen.getByRole('button', {name: 'Play auto-pan'})).toBeInTheDocument();
+    fireEvent.pointerMove(track, {clientX: 360});
+    expect(container.querySelector('.explorer-stage')).toHaveAttribute('data-bottom-open', 'true');
+    const camera = JSON.parse(screen.getByTestId(view === 'flat' ? 'mock-viewer' : 'mock-gallery').getAttribute('data-camera-request')!);
+    expect(camera.x).toBeCloseTo(.35);
+    expect(camera).toMatchObject({y: -.2, width: .05, height: 1.4});
+    if (view === 'gallery') expect(screen.getByTestId('mock-viewer')).toHaveAttribute('data-camera-request', 'null');
+    fireEvent.pointerUp(track, {clientX: 360});
+    fireEvent.click(track, {clientX: 360});
+    expect(screen.getByTestId('mock-viewer')).toHaveAttribute('data-mode', 'free');
+    expect(window.location.search).toContain('scene=' + nearestScene(tapestryManifest.scenes, .375).id);
+    expect(release).toHaveBeenCalled();
   });
 
   it('supports the accessible navigator and isolates viewer arrow keys', async () => {

@@ -18,7 +18,7 @@ export function AutoPanControl({ playing, notch, onNotchChange, onToggle }: {
       <Slider aria-labelledby={`${id}-label ${id}-value`} className="auto-pan-slider"
         largeStep={1} min={1} max={4} step={1} thumbAlignment="center" value={[notch]}
         onValueChange={(value) => onNotchChange(Math.max(1, Math.min(4, Math.round(Array.isArray(value) ? value[0] : value))))} />
-      <span aria-hidden="true" className="auto-pan-notches">{AUTO_PAN_SPEEDS.map((speed) => <i key={speed.label} />)}</span>
+      <span aria-hidden="true" className="auto-pan-notches">{AUTO_PAN_SPEEDS.map((speed, index) => <i data-passed={index < notch} key={speed.label} />)}</span>
       <span className="auto-pan-speed-name" id={`${id}-value`}>{AUTO_PAN_SPEEDS[notch - 1].label}</span>
     </div>
     <button aria-label={playing ? 'Pause auto-pan' : 'Play auto-pan'} className="auto-pan-play" onClick={onToggle} type="button">

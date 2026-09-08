@@ -5,7 +5,7 @@ import { tapestryManifest } from '@/data/tapestry-manifest';
 
 const runtime = vi.hoisted(() => ({ create: vi.fn(), controller: {
   dispose: vi.fn(), setPlayback: vi.fn(), setReducedMotion: vi.fn(), setAnnotations: vi.fn(),
-  jump: vi.fn(), zoom: vi.fn(), exit: vi.fn(),
+  jump: vi.fn(), pan: vi.fn(), zoom: vi.fn(), exit: vi.fn(),
 } }));
 vi.mock('@/lib/gallery-runtime', () => ({ createGallery: runtime.create }));
 
@@ -35,6 +35,15 @@ describe('lazy gallery lifecycle', () => {
     view.unmount();
     expect(runtime.controller.dispose).toHaveBeenCalled();
     expect(runtime.create.mock.calls[0][0].signal.aborted).toBe(true);
+  });
+  it('applies navigator motion immediately without a chapter jump or rebuilding the gallery', async () => {
+    const props = propsFor();
+    const view = render(<TapestryGallery {...props} />);
+    await screen.findByRole('button', { name: 'Zoom in gallery' });
+    view.rerender(<TapestryGallery {...props} mode="free" cameraRequest={{x: .35, y: -.2, width: .05, height: 1.4}} />);
+    expect(runtime.controller.pan).toHaveBeenLastCalledWith(.375);
+    expect(runtime.controller.jump).not.toHaveBeenCalled();
+    expect(runtime.create).toHaveBeenCalledTimes(1);
   });
   it('prepares the exact flat camera before completing the reduced-motion exit', async () => {
     const props = propsFor();

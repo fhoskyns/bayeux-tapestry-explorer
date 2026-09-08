@@ -308,6 +308,15 @@ export async function createGallery(options: Options) {
       dirty = true;
     },
     jump(center: number) { if (exiting) return; moving = false; animateTo({ ...pose, center, v: 0.5 }, 850); },
+    pan(center: number) {
+      if (exiting) return;
+      moving = false;
+      transition = null;
+      pose.center = clamp(center, 0, 1);
+      dirty = true;
+      tileRefreshPending = true;
+      report();
+    },
     zoom,
     exit(prepare: (rect: ViewerViewport) => void, done: () => void) {
       exiting = true;

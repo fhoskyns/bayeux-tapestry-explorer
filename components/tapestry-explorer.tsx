@@ -77,42 +77,93 @@ export function nearestScene(scenes: Scene[], fraction: number) {
   }, scenes[0]);
 }
 
-function SceneNavigator({
+export function SceneNavigator({
   activeScene,
   mode,
   scenes,
   viewport,
   onJump,
+  canPan,
+  onPanStart,
+  onPan,
+  onPanEnd,
 }: {
   activeScene: Scene | null;
   mode: ViewerMode;
   scenes: Scene[];
   viewport: ViewerViewport | null;
   onJump: (scene: Scene) => void;
+  canPan: boolean;
+  onPanStart: () => void;
+  onPan: (deltaFraction: number) => void;
+  onPanEnd: () => void;
 }) {
   const [hoverFraction, setHoverFraction] = useState<number | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const dragRef = useRef<{ pointerId: number; startX: number; stripWidth: number; moved: boolean } | null>(null);
+  const suppressClickRef = useRef(false);
   const sceneLeft = activeScene ? activeScene.pixelBounds.x / MASTER_WIDTH : 0;
   const sceneWidth = activeScene ? activeScene.pixelBounds.width / MASTER_WIDTH : 1;
   const activeLeft = viewport?.x ?? sceneLeft;
   const activeWidth = viewport?.width ?? sceneWidth;
 
   const handlePointer = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (drag) {
+      if (event.pointerId !== drag.pointerId) return;
+      const delta = event.clientX - drag.startX;
+      if (Math.abs(delta) > 3) drag.moved = true;
+      if (drag.moved) onPan(delta / drag.stripWidth);
+      return;
+    }
     const bounds = event.currentTarget.getBoundingClientRect();
     setHoverFraction(Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width)));
   };
 
   const handleJump = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (suppressClickRef.current) { suppressClickRef.current = false; return; }
+    if (canPan && event.target instanceof Element && event.target.closest('.navigator-window')) return;
     const bounds = event.currentTarget.getBoundingClientRect();
     const fraction = Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width));
     onJump(nearestScene(scenes, fraction));
   };
 
+  const startDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+    suppressClickRef.current = false;
+    if (dragRef.current || !canPan || event.button !== 0 || event.isPrimary === false ||
+      !(event.target instanceof Element) || !event.target.closest('.navigator-window')) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    if (bounds.width <= 0) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragRef.current = { pointerId: event.pointerId, startX: event.clientX, stripWidth: bounds.width, moved: false };
+    setHoverFraction(null);
+    setDragging(true);
+    onPanStart();
+  };
+
+  const endDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    if (event.type === 'pointerup' && drag.moved) onPan((event.clientX - drag.startX) / drag.stripWidth);
+    suppressClickRef.current = true;
+    dragRef.current = null;
+    setDragging(false);
+    setHoverFraction(null);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    onPanEnd();
+  };
+
   return (
-    <div className="tapestry-navigator" data-mode={mode}>
+    <div className="tapestry-navigator" data-mode={mode} data-pannable={canPan} data-dragging={dragging}>
       <div
         aria-hidden="true"
         className="navigator-hit-area"
         onClick={handleJump}
+        onPointerDown={startDrag}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+        onLostPointerCapture={endDrag}
         onPointerLeave={() => setHoverFraction(null)}
         onPointerMove={handlePointer}
       >
@@ -121,8 +172,8 @@ function SceneNavigator({
           <span
             className="navigator-window"
             style={{
-              left: `${Math.min(activeLeft, 0.993) * 100}%`,
-              width: `${Math.max(Math.min(activeWidth, 1 - activeLeft) * 100, 0.7)}%`,
+              left: `${Math.max(0, Math.min(activeLeft, 0.993)) * 100}%`,
+              width: `${Math.max((Math.min(1, activeLeft + activeWidth) - Math.max(0, activeLeft)) * 100, 0.7)}%`,
             }}
           />
         </div>
@@ -183,6 +234,8 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
   const [galleryCamera, setGalleryCamera] = useState<ViewerViewport>({ x: 0, y: 0, width: 1, height: 1 });
   const [cameraRequest, setCameraRequest] = useState<ViewerViewport | null>(null);
   const liveCameraRef = useRef<ViewerViewport | null>(null);
+  const navigatorCameraRef = useRef<ViewerViewport | null>(null);
+  const [navigatorDragging, setNavigatorDragging] = useState(false);
   const autoPanSpeed = AUTO_PAN_SPEEDS[autoPanNotch - 1];
   const pauseAutoPan = useCallback(() => setAutoPan(false), []);
   const { immersive, edges, reveal, setImmersive } = useImmersiveControls(false);
@@ -190,7 +243,6 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
   const annotationTriggerRef = useRef<HTMLElement | null>(null);
   const annotationPanelRef = useRef<HTMLDialogElement | null>(null);
   const readingTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const isEditorialPreview = manifest.editorial.status !== 'publication-ready';
   const scenes = manifest.scenes;
   const scene = useMemo(() => scenes.find((item) => item.id === sceneId) ?? null, [sceneId, scenes]);
   const dziUrl = composeDziUrl(import.meta.env.VITE_TAPESTRY_TILE_BASE_URL, manifest.image.dziPath);
@@ -458,6 +510,7 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
   const trackFlatViewport = useCallback((next: ViewerViewport) => { if (!gallery) setViewport(next); }, [gallery]);
   const trackFlatExplore = useCallback((center: number) => { if (!gallery) enterFreeExploration(center); }, [gallery, enterFreeExploration]);
   const galleryMove = useCallback((camera: ViewerViewport) => {
+    liveCameraRef.current = camera;
     const center = Math.max(0, Math.min(1, camera.x + camera.width / 2));
     const width = Math.min(1, camera.width), height = Math.min(1, camera.height);
     setViewport({ x: Math.max(0, Math.min(1 - width, center - width / 2)), y: Math.max(0, Math.min(1 - height, camera.y)), width, height });
@@ -466,6 +519,36 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
     setActiveAnnotation((current) => current && nextScene.annotations.some((note) => note.id === current.id) ? current : null);
     setMode('free');
   }, [scenes]);
+  const startNavigatorPan = () => {
+    navigatorCameraRef.current = liveCameraRef.current ?? viewport ?? (scene ? {
+      x: scene.pixelBounds.x / MASTER_WIDTH, y: 0, width: scene.pixelBounds.width / MASTER_WIDTH, height: 1,
+    } : null);
+    setAutoPan(false);
+    setNavigatorDragging(true);
+    setActiveAnnotation(null);
+  };
+  const panFromNavigator = (delta: number) => {
+    const start = navigatorCameraRef.current;
+    if (!start || galleryClosing) return;
+    // Work from the real camera, not the clipped/minimum-size navigator window.
+    // Only X changes: relaxed framing, vertical detail, and zoom stay untouched.
+    const context = gallery || start.height > 1 / 0.84 || start.framing === 'context';
+    const width = Math.min(start.width, 1);
+    const x = context
+      ? Math.max(-width / 2, Math.min(1 - width / 2, start.x + delta))
+      : Math.max(0, Math.min(1 - width, start.x + delta));
+    const next = { ...start, x };
+    liveCameraRef.current = next;
+    setInitialViewport(null);
+    setCameraRequest(next);
+    setMode('free');
+    setSceneId(nearestScene(scenes, Math.max(0, Math.min(1, x + start.width / 2))).id);
+  };
+  const endNavigatorPan = () => {
+    navigatorCameraRef.current = null;
+    setNavigatorDragging(false);
+    reveal();
+  };
   const prepareFlat = useCallback((camera: ViewerViewport) => {
     setMode('free');
     setInitialViewport(null);
@@ -481,6 +564,7 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
     if (!value || galleryClosing) return;
     // Playback is shared user intent; only the active viewer owns its animation.
     if (value === 'gallery' && !gallery) {
+      setCameraRequest(null);
       setGalleryCamera(liveCameraRef.current ?? { x: 0, y: 0, width: 1, height: 1 });
       setGalleryClosing(false); setGallery(true);
     } else if (value === 'flat' && gallery) setGalleryClosing(true);
@@ -491,7 +575,7 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
     <>
     <Dialog open={readingOpen && !!scene} onOpenChange={(open) => { setReadingOpen(open); if (open) pauseAutoPan(); }}>
     <main className="explorer" inert={arrivalActive ? true : undefined}>
-      <div className="explorer-stage" data-gallery={gallery} data-immersive={immersive && mode !== 'overview'} data-top-open={edges.top} data-bottom-open={edges.bottom || scenePickerOpen}>
+      <div className="explorer-stage" data-gallery={gallery} data-immersive={immersive && mode !== 'overview'} data-top-open={edges.top} data-bottom-open={edges.bottom || scenePickerOpen || navigatorDragging}>
         <header className="explorer-header">
           <h1>
             <a href="/" onClick={(event) => { event.preventDefault(); goOverview(); }}>
@@ -519,7 +603,7 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
                 activeAnnotationId={activeAnnotation?.id}
                 dziUrl={dziUrl}
                 initialViewport={initialViewport}
-                cameraRequest={cameraRequest}
+                cameraRequest={gallery && !galleryClosing ? null : cameraRequest}
                 onCameraChange={trackCamera}
                 mode={mode}
                 onAnnotationActivate={activateAnnotation}
@@ -532,6 +616,7 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
               />
             </div>
             {gallery && dziUrl ? <TapestryGallery dziUrl={dziUrl} initialCamera={galleryCamera} closing={galleryClosing}
+              cameraRequest={cameraRequest}
               autoPan={autoPan} speed={autoPanSpeed.pixelsPerSecond} reduceMotion={reduceMotion} scene={scene} mode={mode}
               activeAnnotationId={activeAnnotation?.id} onAnnotationActivate={activateAnnotation}
               onMove={galleryMove} onManual={pauseAutoPan} onTap={reveal} onPrepareFlat={prepareFlat} onClosed={closeGallery} /> : null}
@@ -633,7 +718,9 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
           )}
           </div>
         </div>
-        <SceneNavigator activeScene={scene} mode={mode} onJump={openScene} scenes={scenes} viewport={viewport} />
+        <SceneNavigator activeScene={scene} mode={mode} onJump={openScene} scenes={scenes} viewport={viewport}
+          canPan={!!dziUrl && mode !== 'overview' && !galleryClosing}
+          onPanStart={startNavigatorPan} onPan={panFromNavigator} onPanEnd={endNavigatorPan} />
         <footer className="explorer-footer">
           <span>An independent, non-commercial project</span>
           <div>
@@ -669,11 +756,7 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
             <div className="transcript-heading"><BookOpenText aria-hidden="true" /> Inscription and translation</div>
             <p className="latin" lang="la">{scene.latinInscription}</p>
             <p className="translation">{scene.englishTranslation}</p>
-            <p className="translation-note">
-              {isEditorialPreview
-                ? 'Project translation — draft, awaiting review.'
-                : 'Project translation — independently reviewed for publication.'}
-            </p>
+            <p className="translation-note">Project translation</p>
           </div>
           <div className="annotation-index">
             <p className="annotation-index__label">Notes in this scene</p>

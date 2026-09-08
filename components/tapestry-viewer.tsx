@@ -718,6 +718,13 @@ export function TapestryViewer({
       cameraRequest.x * dimensions.x, cameraRequest.y * dimensions.y,
       cameraRequest.width * dimensions.x, cameraRequest.height * dimensions.y,
     ), true);
+    // An immediate navigator seek may not start an OSD animation. Report here
+    // as well as at animation-finish so the navigator and shared URL follow it.
+    const viewport = viewportForViewer(viewer, contextRef.current);
+    if (viewport) {
+      liveViewportRef.current = viewport;
+      contextRef.current.onViewportChange(viewport);
+    }
   }, [cameraRequest, dziUrl, viewerGeneration]);
 
   useEffect(() => {

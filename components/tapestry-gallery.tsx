@@ -9,6 +9,7 @@ import type { Annotation, Scene } from '@/lib/tapestry-schema';
 type Props = {
   dziUrl: string;
   initialCamera: ViewerViewport;
+  cameraRequest?: ViewerViewport | null;
   closing: boolean;
   autoPan: boolean;
   speed: number;
@@ -67,6 +68,10 @@ export function TapestryGallery(props: Props) {
     }
     lastNavigation.current = { id: props.scene?.id, mode: props.mode };
   }, [ready, props.mode, props.scene, props.closing]);
+  useEffect(() => {
+    if (!ready || props.closing || !props.cameraRequest) return;
+    controllerRef.current?.pan(props.cameraRequest.x + props.cameraRequest.width / 2);
+  }, [ready, props.cameraRequest, props.closing]);
   // Apply the latest playback choice after any navigation queued during loading.
   useEffect(() => { controllerRef.current?.setPlayback(props.autoPan, props.speed); }, [ready, props.autoPan, props.speed]);
   useEffect(() => {
