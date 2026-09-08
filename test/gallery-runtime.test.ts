@@ -106,6 +106,20 @@ describe('gallery camera and playback gestures', () => {
     expect(onManual).not.toHaveBeenCalled();
   });
 
+  it('clenches the native glove while holding the gallery, without pausing playback', async () => {
+    const {controller, canvas, onManual} = await setup();
+    const surface = canvas.parentElement!;
+    controller.setPlayback(true, 28);
+    pointer(canvas, 'pointerdown', 1, 100);
+    expect(surface).toHaveAttribute('data-grabbing', 'true');
+    expect(onManual).not.toHaveBeenCalled();
+    pointer(canvas, 'pointerup', 1, 100);
+    expect(surface).not.toHaveAttribute('data-grabbing');
+    pointer(canvas, 'pointerdown', 2, 100);
+    controller.dispose();
+    expect(surface).not.toHaveAttribute('data-grabbing');
+  });
+
   it('keeps touch pinch playing but still pauses on a one-finger drag', async () => {
     const {controller, canvas, onMove, onManual} = await setup();
     controller.setPlayback(true, 28);

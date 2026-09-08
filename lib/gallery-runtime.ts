@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { createMarker, type ViewerViewport } from '@/components/tapestry-viewer';
 import { selectorCenter, type Annotation, type Scene } from '@/lib/tapestry-schema';
 import { updateAutoPreview } from '@/lib/auto-preview';
+import { bindGrabCursor } from '@/lib/grab-cursor';
 import { cameraFromPose, clamp, galleryEntryPose, poseFromCamera, TEXTILE, tileLayout, visibleTiles, type GalleryPose } from '@/lib/gallery-math';
 
 type Options = {
@@ -29,6 +30,7 @@ export async function createGallery(options: Options) {
   renderer.domElement.setAttribute('aria-label', 'Interactive 3D gallery. Drag to move along the case. Scroll or pinch to zoom. Shift-drag to orbit. Arrow keys move; plus and minus zoom.');
   renderer.domElement.tabIndex = 0;
   host.insertBefore(renderer.domElement, host.firstChild);
+  const releaseGrabCursor = bindGrabCursor(host);
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(42, 1, 0.03, 400);
   const hemisphere = new THREE.HemisphereLight(0xffffff, 0xc3b9a8, 2.3);
@@ -80,6 +82,7 @@ export async function createGallery(options: Options) {
   const dispose = () => {
     if (disposed) return;
     disposed = true;
+    releaseGrabCursor();
     abort.abort();
     signal.removeEventListener('abort', dispose);
     window.cancelAnimationFrame(frame);

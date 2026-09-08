@@ -125,6 +125,19 @@ async function initializedViewer() {
 }
 
 describe('real tapestry viewer', () => {
+  it('clenches the native glove on canvas press without interrupting auto-pan', async () => {
+    const onAutoPanPause = vi.fn();
+    const view = render(<TapestryViewer {...viewerProps()} autoPan onAutoPanPause={onAutoPanPause} />);
+    const viewer = await initializedViewer();
+    act(() => {viewer.emit('open'); viewer.emit('update-viewport');});
+    const surface = view.container.querySelector('[data-viewer-canvas]')!;
+    fireEvent.pointerDown(surface, {button:0});
+    expect(surface).toHaveAttribute('data-grabbing', 'true');
+    expect(onAutoPanPause).not.toHaveBeenCalled();
+    fireEvent.pointerUp(window);
+    expect(surface).not.toHaveAttribute('data-grabbing');
+  });
+
   function animationClock() {
     let nextId = 1;
     const frames = new Map<number, FrameRequestCallback>();

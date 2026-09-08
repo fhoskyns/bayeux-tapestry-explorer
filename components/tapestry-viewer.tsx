@@ -8,6 +8,7 @@ import { selectorCenter, type Annotation, type Scene } from '@/lib/tapestry-sche
 import { annotationLabel } from '@/lib/annotation-label';
 import type { AutoPanSpeed } from '@/lib/auto-pan';
 import { positionAnnotationPreview, updateAutoPreview } from '@/lib/auto-preview';
+import { bindGrabCursor } from '@/lib/grab-cursor';
 
 const MASTER_WIDTH = 482096;
 const OVERVIEW_IMAGE =
@@ -304,6 +305,7 @@ export function TapestryViewer({
   useEffect(() => {
     if (!elementRef.current) return;
 
+    const releaseGrabCursor = bindGrabCursor(elementRef.current);
     let cancelled = false;
     let resizeFrame = 0;
     let viewer: OpenSeadragonType.Viewer | null = null;
@@ -511,6 +513,7 @@ export function TapestryViewer({
 
     return () => {
       cancelled = true;
+      releaseGrabCursor();
       renderOverlaysRef.current = () => undefined;
       reportImmersionRef.current = () => undefined;
       relaxRef.current = () => undefined;

@@ -159,7 +159,9 @@
 /* Immersive mode: chrome overlays the full-height image; it never reserves space. */
 .explorer-stage { display: block; position: relative; height: 100svh; min-height: 0; overflow: clip; }
 .explorer .viewer-section { position: absolute; inset: 0; padding: 0; }
-.explorer .viewer-frame, .explorer .tapestry-canvas { cursor: default; }
+.explorer .viewer-frame { cursor: default; }
+.explorer .tapestry-canvas, .explorer .gallery-canvas { cursor: grab; }
+.explorer .tapestry-canvas[data-grabbing='true'], .explorer .gallery-canvas[data-grabbing='true'] { cursor: grabbing; }
 .explorer .navigator-hit-area { cursor: default; touch-action: none; user-select: none; }
 .explorer .navigator-strip img { pointer-events: none; }
 .explorer .navigator-window { pointer-events: auto; }
