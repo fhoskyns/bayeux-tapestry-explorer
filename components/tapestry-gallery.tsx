@@ -55,7 +55,6 @@ export function TapestryGallery(props: Props) {
     return () => { abort.abort(); controllerRef.current?.dispose(); controllerRef.current = null; };
   }, [retry]);
 
-  useEffect(() => { controllerRef.current?.setPlayback(props.autoPan, props.speed); }, [ready, props.autoPan, props.speed]);
   useEffect(() => { controllerRef.current?.setReducedMotion(props.reduceMotion); }, [ready, props.reduceMotion]);
   useEffect(() => {
     controllerRef.current?.setAnnotations(props.scene, props.activeAnnotationId, props.onAnnotationActivate);
@@ -68,6 +67,8 @@ export function TapestryGallery(props: Props) {
     }
     lastNavigation.current = { id: props.scene?.id, mode: props.mode };
   }, [ready, props.mode, props.scene, props.closing]);
+  // Apply the latest playback choice after any navigation queued during loading.
+  useEffect(() => { controllerRef.current?.setPlayback(props.autoPan, props.speed); }, [ready, props.autoPan, props.speed]);
   useEffect(() => {
     if (!props.closing) return;
     if (!controllerRef.current) { context.current.onClosed(); return; }

@@ -76,4 +76,15 @@ describe('lazy gallery lifecycle', () => {
     await act(async () => complete(runtime.controller));
     expect(runtime.controller.jump).toHaveBeenCalledExactlyOnceWith((next.pixelBounds.x + next.pixelBounds.width / 2) / 482096);
   });
+  it.each([false, true])('applies the latest playback choice after loading and pending navigation (playing: %s)', async (playing) => {
+    let complete: (value: typeof runtime.controller) => void = () => undefined;
+    runtime.create.mockImplementationOnce(() => new Promise((resolve) => { complete = resolve; }));
+    const props = propsFor();
+    const view = render(<TapestryGallery {...props} autoPan />);
+    await waitFor(() => expect(runtime.create).toHaveBeenCalledTimes(1));
+    view.rerender(<TapestryGallery {...props} scene={tapestryManifest.scenes[7]} autoPan={playing} speed={84} />);
+    await act(async () => complete(runtime.controller));
+    expect(runtime.controller.setPlayback).toHaveBeenLastCalledWith(playing, 84);
+    expect(runtime.controller.jump.mock.invocationCallOrder[0]).toBeLessThan(runtime.controller.setPlayback.mock.invocationCallOrder.at(-1)!);
+  });
 });

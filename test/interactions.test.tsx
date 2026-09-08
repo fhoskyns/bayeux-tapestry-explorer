@@ -5,6 +5,19 @@ import { composeDziUrl, nearestScene, TapestryExplorer } from '@/components/tape
 import { tapestryManifest } from '@/data/tapestry-manifest';
 import SourcesPage from '@/app/sources/page';
 import { ARRIVAL_DURATION, ARRIVAL_PREFERENCE, TapestryArrival } from '@/components/tapestry-arrival';
+import type { ComponentProps } from 'react';
+import type { TapestryGallery } from '@/components/tapestry-gallery';
+
+vi.mock('@/components/tapestry-gallery', () => ({
+  TapestryGallery: ({ autoPan, speed, closing, onClosed, onPrepareFlat }: ComponentProps<typeof TapestryGallery>) => (
+    <div data-testid="mock-gallery" data-auto-pan={String(autoPan)} data-auto-pan-speed={speed}>
+      {closing ? <button type="button" onClick={() => {
+        onPrepareFlat({ x: .2, y: 0, width: .02, height: 1 });
+        onClosed();
+      }}>Complete gallery handoff</button> : null}
+    </div>
+  ),
+}));
 
 vi.mock('@/lib/satellite-flight', () => ({
   FLIGHT_DURATION: 2600,
@@ -165,6 +178,42 @@ describe('guided tour interactions', () => {
       }
     }
     expect(nearestScene(scenes, 1).id).toBe('58');
+  });
+
+  it('carries playback and speed both ways, with only the visible viewer playing', () => {
+    vi.stubEnv('VITE_TAPESTRY_TILE_BASE_URL', 'https://tiles.example/v1');
+    window.history.replaceState(null, '', '/?scene=07');
+    render(<TapestryExplorer manifest={tapestryManifest} />);
+    fireEvent.keyDown(screen.getByRole('slider', { name: /auto-pan speed/i }), { key: 'End' });
+    fireEvent.click(screen.getByRole('button', { name: 'Play auto-pan' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Gallery' }));
+    expect(screen.getByRole('button', { name: 'Pause auto-pan' })).toBeInTheDocument();
+    expect(screen.getByTestId('mock-gallery')).toHaveAttribute('data-auto-pan', 'true');
+    expect(screen.getByTestId('mock-gallery')).toHaveAttribute('data-auto-pan-speed', '84');
+    expect(screen.getByTestId('mock-viewer')).toHaveAttribute('data-auto-pan', 'false');
+    fireEvent.click(screen.getByRole('button', { name: 'Bird’s-eye' }));
+    expect(screen.getByRole('button', { name: 'Pause auto-pan' })).toBeInTheDocument();
+    expect(screen.getByTestId('mock-viewer')).toHaveAttribute('data-auto-pan', 'false');
+    fireEvent.keyDown(screen.getByRole('slider', { name: /auto-pan speed/i }), { key: 'Home' });
+    fireEvent.click(screen.getByRole('button', { name: 'Complete gallery handoff' }));
+    expect(screen.queryByTestId('mock-gallery')).not.toBeInTheDocument();
+    expect(screen.getByTestId('mock-viewer')).toHaveAttribute('data-auto-pan', 'true');
+    expect(screen.getByTestId('mock-viewer')).toHaveAttribute('data-auto-pan-speed', '14');
+    expect(screen.getByRole('button', { name: 'Pause auto-pan' })).toBeInTheDocument();
+  });
+
+  it.each([false, true])('respects paused playback across the handoff (pause during exit: %s)', (pauseDuringExit) => {
+    vi.stubEnv('VITE_TAPESTRY_TILE_BASE_URL', 'https://tiles.example/v1');
+    window.history.replaceState(null, '', '/?scene=07');
+    render(<TapestryExplorer manifest={tapestryManifest} />);
+    if (pauseDuringExit) fireEvent.click(screen.getByRole('button', { name: 'Play auto-pan' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Gallery' }));
+    expect(screen.getByTestId('mock-gallery')).toHaveAttribute('data-auto-pan', String(pauseDuringExit));
+    fireEvent.click(screen.getByRole('button', { name: 'Bird’s-eye' }));
+    if (pauseDuringExit) fireEvent.click(screen.getByRole('button', { name: 'Pause auto-pan' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Complete gallery handoff' }));
+    expect(screen.getByRole('button', { name: 'Play auto-pan' })).toBeInTheDocument();
+    expect(screen.getByTestId('mock-viewer')).toHaveAttribute('data-auto-pan', 'false');
   });
 
   it('clears a pinned note when continuous exploration enters another scene', () => {

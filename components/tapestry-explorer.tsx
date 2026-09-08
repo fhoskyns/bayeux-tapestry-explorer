@@ -473,13 +473,13 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
     liveCameraRef.current = camera;
   }, []);
   const closeGallery = useCallback(() => {
-    setGallery(false); setGalleryClosing(false); setAutoPan(false);
+    setGallery(false); setGalleryClosing(false);
     window.setTimeout(() => document.querySelector<HTMLElement>('[data-view-toggle="flat"]')?.focus({ preventScroll: true }), 0);
   }, []);
   const changeView = (values: string[]) => {
     const value = values[0];
     if (!value || galleryClosing) return;
-    pauseAutoPan();
+    // Playback is shared user intent; only the active viewer owns its animation.
     if (value === 'gallery' && !gallery) {
       setGalleryCamera(liveCameraRef.current ?? { x: 0, y: 0, width: 1, height: 1 });
       setGalleryClosing(false); setGallery(true);
