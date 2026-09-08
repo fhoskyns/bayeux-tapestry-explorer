@@ -227,6 +227,7 @@ export function TapestryViewer({
   const restoredViewportRef = useRef<ViewerViewport | null>(null);
   const liveViewportRef = useRef<ViewerViewport | null>(null);
   const exploringRef = useRef(false);
+  const userZoomRef = useRef(false);
   const immersiveRef = useRef(false);
   const relaxingRef = useRef(false);
   const contextAnchorRef = useRef<number | null>(null);
@@ -375,14 +376,30 @@ export function TapestryViewer({
         contextRef.current.onAutoPanPause?.();
         reportExplore();
       };
-      viewer.addHandler('canvas-drag', () => contextRef.current.onAutoPanPause?.());
-      viewer.addHandler('canvas-drag-end', manualExplore);
-      viewer.addHandler('canvas-scroll', manualExplore);
-      viewer.addHandler('canvas-pinch', manualExplore);
-      viewer.addHandler('canvas-double-click', manualExplore);
+      const zoomExplore = () => { userZoomRef.current = true; reportExplore(); };
+      let pinchedGesture = false, touchTravel = 0;
+      viewer.addHandler('canvas-press', () => { pinchedGesture = false; touchTravel = 0; });
+      viewer.addHandler('canvas-drag', (event) => {
+        if (event.pointerType === 'touch') {
+          touchTravel += Math.hypot(event.delta?.x ?? 0, event.delta?.y ?? 0);
+          if (pinchedGesture || touchTravel < 6) { event.preventDefaultAction = true; return; }
+        }
+        contextRef.current.onAutoPanPause?.();
+      });
+      viewer.addHandler('canvas-drag-end', (event) => {
+        if (event.pointerType === 'touch' && (pinchedGesture || touchTravel < 6)) {
+          event.preventDefaultAction = true;
+          return;
+        }
+        manualExplore();
+      });
+      viewer.addHandler('canvas-scroll', zoomExplore);
+      viewer.addHandler('canvas-pinch', () => { pinchedGesture = true; zoomExplore(); });
+      viewer.addHandler('canvas-double-click', zoomExplore);
       viewer.addHandler('canvas-key', (event) => {
         const code = event.originalEvent?.code;
-        if (code && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'Equal', 'Minus', 'Digit0', 'KeyR', 'KeyF'].includes(code)) {
+        if (code === 'Equal' || code === 'Minus') userZoomRef.current = true;
+        if (code && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'Digit0', 'KeyR', 'KeyF'].includes(code)) {
           contextRef.current.onAutoPanPause?.();
         }
         if (viewer && !(viewer as PanAwareViewer).panVertical && code && ['ArrowUp', 'ArrowDown', 'KeyW', 'KeyS'].includes(code)) {
@@ -746,8 +763,9 @@ export function TapestryViewer({
       }
       const view = viewer.viewport.getBounds(true);
       const target = viewer.viewport.getBounds(false);
-      // Let the guided entry finish before taking over its horizontal motion.
-      if (Math.abs(view.width - target.width) + Math.abs(view.x - target.x) > view.width * 0.0001) {
+      const unsettled = Math.abs(view.width - target.width) + Math.abs(view.x - target.x) > view.width * 0.0001;
+      // Wait for entry/restoration, but keep moving through an explicit user zoom.
+      if (unsettled && !(userZoomRef.current && contextRef.current.mode === 'free')) {
         previousTime = null;
         frame = window.requestAnimationFrame(step);
         return;
@@ -755,6 +773,11 @@ export function TapestryViewer({
       const image = item.getBounds(true);
       const remaining = image.x + image.width - (view.x + view.width);
       if (remaining <= image.width * 0.00000001) {
+        if (unsettled) {
+          previousTime = null;
+          frame = window.requestAnimationFrame(step);
+          return;
+        }
         contextRef.current.onAutoPanPause?.();
         return;
       }
@@ -763,7 +786,11 @@ export function TapestryViewer({
       if (elapsed > 0) {
         const distance = Math.min(remaining, view.width * (contextRef.current.autoPanSpeed ?? 28) / Math.max(1, viewer.viewport.getContainerSize().x) * elapsed);
         exploringRef.current = true;
-        viewer.viewport.panBy(new OpenSeadragon.Point(distance, 0), true);
+        if (unsettled) {
+          // Shift only the horizontal spring: panBy(..., true) would cancel
+          // pending centre motion and interfere with the zoom's anchor point.
+          (viewer.viewport as MotionAwareViewport).centerSpringX.shiftBy(distance);
+        } else viewer.viewport.panBy(new OpenSeadragon.Point(distance, 0), true);
         if (time - reportedAt >= 250 || distance === remaining) {
           const viewport = viewportForViewer(viewer, contextRef.current);
           if (viewport) {
@@ -790,6 +817,10 @@ export function TapestryViewer({
   }, [autoPan, viewerGeneration]);
 
   useEffect(() => {
+    if (mode !== 'free' || initialViewport || cameraRequest) userZoomRef.current = false;
+  }, [mode, initialViewport, cameraRequest]);
+
+  useEffect(() => {
     const viewer = viewerRef.current;
     if (!viewer?.viewport) return;
     const viewport = viewer.viewport as MotionAwareViewport;
@@ -802,9 +833,9 @@ export function TapestryViewer({
   }, [reduceMotion, viewerGeneration]);
 
   const zoom = useCallback((factor: number) => {
-    contextRef.current.onAutoPanPause?.();
     const viewer = viewerRef.current;
     if (!viewer?.viewport) return;
+    userZoomRef.current = true;
     exploringRef.current = true;
     relaxingRef.current = false;
     viewer.viewport.zoomBy(factor, undefined, contextRef.current.reduceMotion).applyConstraints(

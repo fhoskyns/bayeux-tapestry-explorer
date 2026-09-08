@@ -7,6 +7,8 @@ import { AUTO_PAN_SPEEDS } from '@/lib/auto-pan';
 
 const osd = vi.hoisted(() => {
   type EventData = {
+    pointerType?: string;
+    delta?: { x: number; y: number };
     quick?: boolean;
     maxReached?: boolean;
     originalEvent?: { code: string };
@@ -29,6 +31,7 @@ const osd = vi.hoisted(() => {
     drawer: { canvas: HTMLCanvasElement } | undefined;
     fullyLoaded = true;
     viewBounds = { x: 0, y: 0, width: 1, height: 1 };
+    targetBounds: typeof this.viewBounds | null = null;
     imageBounds = { x: 0, y: 0, width: 3840, height: 2160 };
     item = {
       getContentSize: () => ({ x: 3840, y: 2160 }),
@@ -47,8 +50,8 @@ const osd = vi.hoisted(() => {
       resize: vi.fn(),
       zoomBy: vi.fn(() => this.zoomResult),
       panBy: vi.fn(),
-      getBounds: () => this.viewBounds,
-      centerSpringX: { animationTime: 0.8 },
+      getBounds: (current = false) => current ? this.viewBounds : this.targetBounds ?? this.viewBounds,
+      centerSpringX: { animationTime: 0.8, shiftBy: vi.fn() },
       centerSpringY: { animationTime: 0.8, current: { value: 0.5 }, target: { value: 0.6 }, resetTo: vi.fn() },
       zoomSpring: { animationTime: 0.8 },
       degreesSpring: { animationTime: 0.8 },
@@ -215,7 +218,7 @@ describe('real tapestry viewer', () => {
     } finally { view.unmount(); clock.restore(); }
   });
 
-  it('pauses auto-pan for manual canvas gestures and image controls', async () => {
+  it('pauses auto-pan for dragging, directional keys, Fit and X, but not zoom', async () => {
     const clock = animationClock();
     const props = { ...viewerProps(), onAutoPanPause: vi.fn() };
     const view = render(<TapestryViewer {...props} autoPan />);
@@ -223,7 +226,7 @@ describe('real tapestry viewer', () => {
       const viewer = await initializedViewer();
       viewer.viewBounds = { x: 0.2, y: 0.1, width: 0.2, height: 0.2 };
       act(() => { viewer.emit('open'); viewer.emit('update-viewport'); });
-      for (const name of ['canvas-drag', 'canvas-scroll', 'canvas-pinch', 'canvas-double-click', 'canvas-key']) {
+      for (const name of ['canvas-drag', 'canvas-drag-end', 'canvas-key']) {
         props.onAutoPanPause.mockClear();
         act(() => viewer.emit(name, { originalEvent: { code: 'ArrowRight' } }));
         expect(props.onAutoPanPause, name).toHaveBeenCalledOnce();
@@ -233,12 +236,81 @@ describe('real tapestry viewer', () => {
         act(() => viewer.emit('canvas-key', { originalEvent: { code } }));
         expect(props.onAutoPanPause, code).toHaveBeenCalledOnce();
       }
-      for (const name of ['Zoom in', 'Zoom out', 'Fit current scene', 'Leave close-up — show title and navigation']) {
+      for (const name of ['Fit current scene', 'Leave close-up — show title and navigation']) {
         props.onAutoPanPause.mockClear();
         fireEvent.click(screen.getByRole('button', { name }));
         expect(props.onAutoPanPause, name).toHaveBeenCalledOnce();
       }
     } finally { view.unmount(); clock.restore(); }
+  });
+
+  it('keeps playback and its speed through buttons, wheel, pinch and keyboard zoom', async () => {
+    const clock = animationClock();
+    const props = {...viewerProps(), autoPanSpeed: 56 as const, onAutoPanPause: vi.fn()};
+    const view = render(<TapestryViewer {...props} autoPan />);
+    try {
+      const viewer = await initializedViewer();
+      viewer.viewBounds = {x: .2, y: .1, width: .2, height: .2};
+      act(() => { viewer.emit('open'); viewer.emit('update-viewport'); });
+      clock.step(1000);
+      for (const name of ['Zoom in', 'Zoom out']) fireEvent.click(screen.getByRole('button', {name}));
+      for (const name of ['canvas-scroll', 'canvas-pinch', 'canvas-double-click']) act(() => viewer.emit(name));
+      for (const code of ['Equal', 'Minus']) act(() => viewer.emit('canvas-key', {originalEvent: {code}}));
+      expect(props.onAutoPanPause).not.toHaveBeenCalled();
+      clock.step(1050);
+      expect(viewer.viewport.panBy).toHaveBeenLastCalledWith({x: .2 * 56 / 1200 * .05, y: 0}, true);
+      expect(clock.frames.size).toBe(1);
+    } finally { view.unmount(); clock.restore(); }
+  });
+
+  it('adds horizontal movement during animated zoom without resetting centre or zoom springs', async () => {
+    const clock = animationClock();
+    const props = {...viewerProps(), autoPanSpeed: 28 as const, onAutoPanPause: vi.fn()};
+    const view = render(<TapestryViewer {...props} autoPan />);
+    try {
+      const viewer = await initializedViewer();
+      viewer.viewBounds = {x: .2, y: .1, width: .2, height: .2};
+      viewer.targetBounds = {x: .25, y: .15, width: .1, height: .1};
+      act(() => { viewer.emit('open'); viewer.emit('update-viewport'); });
+      clock.step(1000); clock.step(1050);
+      expect(viewer.viewport.centerSpringX.shiftBy).not.toHaveBeenCalled();
+      // The parent switches to free mode after a zoom gesture, as in the app.
+      fireEvent.click(screen.getByRole('button', {name: 'Zoom in'}));
+      view.rerender(<TapestryViewer {...props} autoPan mode="free" />);
+      clock.step(1100); clock.step(1150);
+      expect(viewer.viewport.centerSpringX.shiftBy).toHaveBeenLastCalledWith(.2 * 28 / 1200 * .05);
+      expect(viewer.viewport.panBy).not.toHaveBeenCalled();
+      expect(viewer.targetBounds).toEqual({x: .25, y: .15, width: .1, height: .1});
+      expect(props.onAutoPanPause).not.toHaveBeenCalled();
+      viewer.viewBounds = {x: .85, y: .1, width: .2, height: .2};
+      viewer.targetBounds = {x: .8, y: .1, width: .2, height: .2};
+      clock.step(1200);
+      expect(props.onAutoPanPause).not.toHaveBeenCalled();
+      expect(clock.frames.size).toBe(1);
+      viewer.viewBounds = {...viewer.targetBounds};
+      clock.step(1250);
+      expect(props.onAutoPanPause).toHaveBeenCalledOnce();
+    } finally { view.unmount(); clock.restore(); }
+  });
+
+  it('does not mistake the last finger of a pinch for a manual drag or fling', async () => {
+    const props = {...viewerProps(), onAutoPanPause: vi.fn()};
+    const view = render(<TapestryViewer {...props} />);
+    const viewer = await initializedViewer();
+    act(() => { viewer.emit('open'); viewer.emit('update-viewport'); viewer.emit('canvas-press'); });
+    const jitter = {pointerType: 'touch', delta: {x: 1, y: 1}, preventDefaultAction: false};
+    act(() => viewer.emit('canvas-drag', jitter));
+    expect(jitter.preventDefaultAction).toBe(true);
+    act(() => viewer.emit('canvas-pinch'));
+    const remainingFinger = {pointerType: 'touch', delta: {x: 20, y: 10}, preventDefaultAction: false};
+    const release = {pointerType: 'touch', preventDefaultAction: false};
+    act(() => { viewer.emit('canvas-drag', remainingFinger); viewer.emit('canvas-release'); viewer.emit('canvas-drag-end', release); });
+    expect(remainingFinger.preventDefaultAction).toBe(true);
+    expect(release.preventDefaultAction).toBe(true);
+    expect(props.onAutoPanPause).not.toHaveBeenCalled();
+    act(() => { viewer.emit('canvas-press'); viewer.emit('canvas-drag', {pointerType: 'touch', delta: {x: 10, y: 0}}); });
+    expect(props.onAutoPanPause).toHaveBeenCalledOnce();
+    view.unmount();
   });
 
   beforeEach(() => {

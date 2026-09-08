@@ -3,7 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { createMarker, type ViewerViewport } from '@/components/tapestry-viewer';
 import { selectorCenter, type Annotation, type Scene } from '@/lib/tapestry-schema';
 import { updateAutoPreview } from '@/lib/auto-preview';
-import { cameraFromPose, clamp, poseFromCamera, TEXTILE, tileLayout, visibleTiles, type GalleryPose } from '@/lib/gallery-math';
+import { cameraFromPose, clamp, galleryEntryPose, poseFromCamera, TEXTILE, tileLayout, visibleTiles, type GalleryPose } from '@/lib/gallery-math';
 
 type Options = {
   host: HTMLElement;
@@ -59,6 +59,7 @@ export async function createGallery(options: Options) {
   let markers: { element: HTMLElement; point: THREE.Vector3 }[] = [];
   const pointers = new Map<number, { x: number; y: number }>();
   let dragDistance = 0;
+  let pinchedGesture = false;
   let model: THREE.Object3D | null = null;
 
   const disposeObject = (object: THREE.Object3D) => object.traverse((child) => {
@@ -158,10 +159,14 @@ export async function createGallery(options: Options) {
   const manual = () => { moving = false; transition = null; options.onManual(); dirty = true; };
   const zoom = (factor: number) => {
     if (exiting) return;
-    manual();
+    // Zoom changes the viewing distance, not the user's playback choice.
+    transition = null;
+    pose.v = 0.5;
     const previousWidth = pose.width;
     pose.width = clamp(pose.width * factor, 0.4, 100);
     flatWidth = clamp(flatWidth * pose.width / previousWidth, 0.15, 70);
+    dirty = true;
+    tileRefreshPending = true;
     report();
   };
 
@@ -173,10 +178,11 @@ export async function createGallery(options: Options) {
   canvas.addEventListener('contextmenu', (event) => event.preventDefault());
   canvas.addEventListener('pointerdown', (event) => {
     if (transition) return;
-    manual(); canvas.focus({ preventScroll: true });
+    // Wait for a real one-pointer drag: a second finger may turn this into zoom.
+    canvas.focus({ preventScroll: true });
     canvas.setPointerCapture(event.pointerId);
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    if (pointers.size === 1) dragDistance = 0;
+    if (pointers.size === 1) { dragDistance = 0; pinchedGesture = false; }
   });
   canvas.addEventListener('pointermove', (event) => {
     const previous = pointers.get(event.pointerId);
@@ -185,15 +191,19 @@ export async function createGallery(options: Options) {
     dragDistance += Math.abs(dx) + Math.abs(dy);
     const other = Array.from(pointers.entries()).find(([id]) => id !== event.pointerId)?.[1];
     if (other) {
+      pinchedGesture = true;
       const before = Math.hypot(previous.x - other.x, previous.y - other.y);
       const after = Math.hypot(event.clientX - other.x, event.clientY - other.y);
       if (before > 5 && after > 5) zoom(before / after);
-    } else if (event.shiftKey || event.buttons === 2) {
-      pose.yaw = clamp(pose.yaw - dx * 0.004, -0.8, 0.8);
-      pose.tilt = clamp(pose.tilt + dy * 0.004, 0.08, 1.15);
-    } else {
-      pose.center = clamp(pose.center - dx / width * pose.width / TEXTILE.width, 0, 1);
-      pose.tilt = clamp(pose.tilt + dy * 0.003, 0.08, 1.15);
+    } else if (!pinchedGesture && dragDistance > 3) {
+      manual();
+      if (event.shiftKey || event.buttons === 2) {
+        pose.yaw = clamp(pose.yaw - dx * 0.004, -0.8, 0.8);
+        pose.tilt = clamp(pose.tilt + dy * 0.004, 0.08, 1.15);
+      } else {
+        pose.center = clamp(pose.center - dx / width * pose.width / TEXTILE.width, 0, 1);
+        pose.tilt = clamp(pose.tilt + dy * 0.003, 0.08, 1.15);
+      }
     }
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     dirty = true;
@@ -203,20 +213,23 @@ export async function createGallery(options: Options) {
     pointers.delete(event.pointerId);
     if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
     report();
-    if (event.type === 'pointerup' && dragDistance < 5) options.onTap();
+    if (event.type === 'pointerup' && !pinchedGesture && dragDistance < 5) options.onTap();
   };
   canvas.addEventListener('pointerup', endPointer);
   canvas.addEventListener('pointercancel', endPointer);
-  canvas.addEventListener('wheel', (event) => { event.preventDefault(); if (!transition) zoom(Math.exp(clamp(event.deltaY, -100, 100) * 0.0025)); }, { passive: false });
+  canvas.addEventListener('lostpointercapture', endPointer);
+  canvas.addEventListener('wheel', (event) => { event.preventDefault(); zoom(Math.exp(clamp(event.deltaY, -100, 100) * 0.0025)); }, { passive: false });
   canvas.addEventListener('keydown', (event) => {
     if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', '+', '=', '-'].includes(event.key)) return;
     event.preventDefault(); event.stopPropagation();
     if (exiting) return;
-    manual();
     if (event.key === '+' || event.key === '=') zoom(0.8);
     else if (event.key === '-') zoom(1.25);
-    else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') pose.tilt = clamp(pose.tilt + (event.key === 'ArrowUp' ? -0.12 : 0.12), 0.08, 1.15);
-    else pose.center = clamp(pose.center + (event.key === 'ArrowRight' ? 1 : -1) * pose.width / 70 * 0.12, 0, 1);
+    else {
+      manual();
+      if (event.key === 'ArrowUp' || event.key === 'ArrowDown') pose.tilt = clamp(pose.tilt + (event.key === 'ArrowUp' ? -0.12 : 0.12), 0.08, 1.15);
+      else pose.center = clamp(pose.center + (event.key === 'ArrowRight' ? 1 : -1) * pose.width / 70 * 0.12, 0, 1);
+    }
     report();
   });
 
@@ -285,7 +298,7 @@ export async function createGallery(options: Options) {
     width = Math.max(1, host.clientWidth); height = Math.max(1, host.clientHeight);
     camera.aspect = width / height; camera.updateProjectionMatrix(); renderer.setSize(width, height);
     requestTiles();
-    animateTo({ ...pose, width: Math.max(3.5, pose.width * 1.7), v: clamp(pose.v, 0, 1), tilt: 0.88, yaw: -0.24 }, 1150);
+    animateTo(galleryEntryPose(pose), 1150);
     frame = requestAnimationFrame(draw);
   } catch (error) { dispose(); throw error; }
 

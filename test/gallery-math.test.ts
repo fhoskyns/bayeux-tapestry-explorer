@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cameraFromPose, poseFromCamera, TEXTILE, tileLayout, visibleTiles } from '@/lib/gallery-math';
+import { cameraFromPose, galleryEntryPose, poseFromCamera, TEXTILE, tileLayout, visibleTiles } from '@/lib/gallery-math';
 import { nearestPreview } from '@/lib/auto-preview';
 
 describe('gallery and facsimile registration', () => {
@@ -14,6 +14,12 @@ describe('gallery and facsimile registration', () => {
     expect(result.y).toBeCloseTo(rect.y, 12);
     expect(result.width).toBeCloseTo(rect.width, 12);
     expect(result.height).toBeCloseTo(rect.height, 12);
+  });
+  it('opens nearly overhead, horizontally aligned and centred on the textile', () => {
+    const previous = { center: .48, v: 1, width: 1.2, tilt: .88, yaw: -.24 };
+    expect(galleryEntryPose(previous)).toEqual({ center: .48, v: .5, width: 3.5, tilt: .08, yaw: 0 });
+    expect(previous.v).toBe(1);
+    expect(galleryEntryPose({...previous, width: 5}).width).toBe(8.5);
   });
   it('keeps all selected tiles valid and caps the working set at 28', () => {
     for (const center of [0, .01, .5, .99, 1]) for (const width of [.4, 3.5, 70, 100]) {

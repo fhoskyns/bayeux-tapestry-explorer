@@ -9,6 +9,11 @@ export function poseFromCamera(rect: ViewerViewport): GalleryPose {
     width: Math.max(0.15, rect.width * TEXTILE.width), tilt: 0, yaw: 0 };
 }
 
+/** Nearly overhead, with the case running horizontally like the chosen reference. */
+export function galleryEntryPose(from: GalleryPose): GalleryPose {
+  return { ...from, width: Math.max(3.5, from.width * 1.7), v: 0.5, tilt: 0.08, yaw: 0 };
+}
+
 export function cameraFromPose(pose: GalleryPose, aspect: number): ViewerViewport {
   const width = pose.width / TEXTILE.width;
   const height = pose.width / Math.max(0.1, aspect) / TEXTILE.depth;

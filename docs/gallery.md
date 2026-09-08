@@ -12,11 +12,11 @@ The pale room and glazed case are a conceptual interpretation, not a surveyed Br
 
 The complete original 482,096 × 5,550 source, including scan margins, is mapped at uniform scale to a 70 × 0.805856095 m plane. Its source `(u,v)` maps to `[70*(u-.5), .981, .805856095*(v-.5)]` in Y-up glTF space. These dimensions describe the digital study, not measurements of the historic cloth or museum case.
 
-Camera handoffs use the unclipped image rectangle, including white margins, rather than the clamped URL rectangle. Entering Gallery pulls back to reveal the case. Returning rises to a top-down, source-registered camera and dissolves into the still-mounted OpenSeadragon viewer. Dragging updates the selected scene; zoom adjustments carry through to the return view. Reduced motion skips the camera flight.
+Camera handoffs use the unclipped image rectangle, including white margins, rather than the clamped URL rectangle. Entering Gallery pulls back to reveal the case at a nearly overhead angle (0.08 radians from vertical, zero yaw), centred vertically on the tapestry. Returning rises to a top-down, source-registered camera and dissolves into the still-mounted OpenSeadragon viewer. Dragging updates the selected scene; zoom adjustments carry through to the return view. Reduced motion skips the camera flight.
 
 Switching views preserves auto-pan's play/pause state and chosen speed. The camera handoff completes before the destination continues panning; only one viewer owns playback at a time. Pausing during loading or a transition remains authoritative and is never overridden by completion.
 
-Drag horizontally to move along the case; vertical drag adjusts the viewing angle. Shift-drag or right-drag orbits within bounded angles. Wheel, pinch, the visible plus/minus controls and keyboard +/− zoom. Keyboard arrows move along the case or adjust tilt. Manual interaction pauses automatic playback. Cameras stay above the textile plane and cannot turn underneath it.
+Drag horizontally to move along the case; vertical drag adjusts the viewing angle. Shift-drag or right-drag orbits within bounded angles. Wheel, pinch, the visible plus/minus controls and keyboard +/− zoom towards the tapestry’s vertical centre line without changing playback state. Zoom also preserves playback in Bird’s-eye, including through its animated zoom. Keyboard arrows move along the case or adjust tilt. Deliberate dragging, navigation and reading still pause automatic playback. Cameras stay above the textile plane and cannot turn underneath it.
 
 ## Resource limits and failure handling
 
