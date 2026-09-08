@@ -92,15 +92,21 @@ function normalizeViewport({ x, y, width, height }: ViewerViewport): ViewerViewp
   };
 }
 
-/** Fit between the real chrome, including compact landscape / enlarged text. */
+/** Match the reference's half-height strip, shrinking only to clear the controls. */
 function contextSpace(element: HTMLElement | null, containerHeight: number) {
   const stage = element?.closest('.explorer-stage');
-  const top = (stage?.querySelector('.explorer-header')?.getBoundingClientRect().height ?? 0) + 16;
+  const header = stage?.querySelector('.explorer-header');
+  const footer = stage?.querySelector('.bottom-chrome');
+  // The inward padding is a transparent gradient, not title/control content.
+  // Let the tapestry occupy that space instead of reserving a second white gap.
+  const headerFade = header ? parseFloat(getComputedStyle(header).paddingBottom) || 0 : 0;
+  const footerFade = footer ? parseFloat(getComputedStyle(footer).paddingTop) || 0 : 0;
+  const top = Math.max(0, (header?.getBoundingClientRect().height ?? 0) - headerFade) + 16;
   // Reserve the small extra height of Resume when leaving a guided scene.
-  const bottom = (stage?.querySelector('.bottom-chrome')?.getBoundingClientRect().height ?? 0) + 32;
+  const bottom = Math.max(0, (footer?.getBoundingClientRect().height ?? 0) - footerFade) + 32;
   const available = Math.max(1, containerHeight - top - bottom);
   return {
-    fill: clamp(available / Math.max(1, containerHeight), 0.1, 0.6),
+    fill: clamp(available / Math.max(1, containerHeight), 0.1, 0.52),
     anchor: clamp((top + available / 2) / Math.max(1, containerHeight), 0.1, 0.9),
   };
 }

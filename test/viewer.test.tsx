@@ -630,7 +630,7 @@ describe('real tapestry viewer', () => {
     expect(viewer.viewport.goHome).not.toHaveBeenCalled();
     const [bounds, immediate] = viewer.viewport.fitBounds.mock.calls[0];
     expect(bounds.x + bounds.width / 2).toBeCloseTo(20);
-    expect(bounds.height).toBeCloseTo(0.5 / 0.6);
+    expect(bounds.height).toBeCloseTo(0.5 / 0.52);
     expect(bounds.y + bounds.height * 0.49).toBeCloseTo(0.25);
     expect(immediate).toBe(reduceMotion);
     expect(onImmersiveChange).toHaveBeenLastCalledWith(false);
@@ -653,6 +653,45 @@ describe('real tapestry viewer', () => {
     const [bounds] = viewer.viewport.fitBounds.mock.calls[0];
     expect(bounds.x + bounds.width / 2).toBeCloseTo(center);
     expect(viewer.visibilityRatio).toBe(0.5);
+  });
+
+  it.each([
+    {width:1305,height:741,header:99,footer:268,fade:28},
+    {width:2048,height:1163,header:112,footer:268,fade:28},
+    {width:390,height:844,header:169,footer:300,fade:24},
+  ])('matches the reference framing within the controls at $width × $height', async ({width,height,header,footer,fade}) => {
+    const props = {...viewerProps(), mode:'free' as const};
+    const view = render(<div className="explorer-stage">
+      <header className="explorer-header" style={{paddingBottom:fade}} />
+      <div className="bottom-chrome" style={{paddingTop:fade}} />
+      <button className="home-button" type="button">Overview</button>
+      <TapestryViewer {...props} />
+    </div>);
+    view.container.querySelector('.explorer-header')!.getBoundingClientRect = () => ({height:header} as DOMRect);
+    view.container.querySelector('.bottom-chrome')!.getBoundingClientRect = () => ({height:footer} as DOMRect);
+    const viewer = await initializedViewer();
+    viewer.viewport.getContainerSize = () => ({x:width,y:height});
+    viewer.item.getBounds = () => ({x:0,y:0,width:100,height:0.5});
+    viewer.viewBounds = {x:19.85,y:0.15,width:0.3,height:0.2};
+    act(() => {viewer.emit('open'); viewer.emit('update-viewport');});
+    viewer.viewport.fitBounds.mockClear();
+    fireEvent.click(screen.getByRole('button',{name:/leave close-up/i}));
+    const [bounds] = viewer.viewport.fitBounds.mock.calls[0];
+    const top = -bounds.y / bounds.height * height;
+    const bottom = (0.5 - bounds.y) / bounds.height * height;
+    const available = height - (header - fade + 16) - (footer - fade + 32);
+    expect(bottom - top).toBeCloseTo(Math.min(height * 0.52, available));
+    expect(top).toBeGreaterThanOrEqual(header - fade + 16 - 0.001);
+    expect(bottom).toBeLessThanOrEqual(height - (footer - fade + 32) + 0.001);
+    expect(bounds.width / bounds.height).toBeCloseTo(width / height);
+    expect(bounds.x + bounds.width / 2).toBeCloseTo(20);
+    expect(screen.getByRole('button',{name:'Overview'})).toHaveFocus();
+    expect(viewer.viewport.goHome).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button',{name:/leave close-up/i})).not.toBeInTheDocument();
+
+    viewer.viewBounds = bounds;
+    act(() => viewer.emit('viewport-change'));
+    expect(viewer.panVertical).toBe(false);
   });
 
   it('retains an edge-centered context viewport in the shareable state', async () => {
