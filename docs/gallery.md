@@ -16,6 +16,8 @@ Camera handoffs use the unclipped image rectangle, including white margins, rath
 
 Switching views preserves auto-pan's play/pause state and chosen speed. The camera handoff completes before the destination continues panning; only one viewer owns playback at a time. Pausing during loading or a transition remains authoritative and is never overridden by completion.
 
+The title and bottom controls slide away when the local textile cross-section exceeds 90% of the Gallery viewport height, and return below 84%. This hysteresis avoids flicker. The measurement uses the rendered 3D camera, including angle and screen aspect ratio, not the flat handoff camera. Edge hover, tap and keyboard reveal remain available; the view toggle, zoom buttons and playback dock stay accessible. Each view retains its own zoom state when switching.
+
 Drag horizontally to move along the case; vertical drag adjusts the viewing angle. Shift-drag or right-drag orbits within bounded angles. Wheel, pinch, the visible plus/minus controls and keyboard +/− zoom towards the tapestry’s vertical centre line without changing playback state. Zoom also preserves playback in Bird’s-eye, including through its animated zoom. Keyboard arrows move along the case or adjust tilt. Deliberate dragging, navigation and reading still pause automatic playback. Cameras stay above the textile plane and cannot turn underneath it.
 
 ## Resource limits and failure handling

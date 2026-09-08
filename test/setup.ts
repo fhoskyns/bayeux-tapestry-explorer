@@ -10,8 +10,8 @@ class ResizeObserverMock {
   disconnect() {}
 }
 
-Object.defineProperty(window, 'ResizeObserver', { value: ResizeObserverMock });
-Object.defineProperty(globalThis, 'ResizeObserver', { value: ResizeObserverMock });
+Object.defineProperty(window, 'ResizeObserver', { value: ResizeObserverMock, configurable: true });
+Object.defineProperty(globalThis, 'ResizeObserver', { value: ResizeObserverMock, configurable: true });
 Object.defineProperty(window, 'scrollTo', { configurable: true, value: () => undefined });
 
 if (!globalThis.PointerEvent) {

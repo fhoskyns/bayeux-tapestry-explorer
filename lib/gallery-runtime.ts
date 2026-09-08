@@ -15,6 +15,7 @@ type Options = {
   onMove: (camera: ViewerViewport) => void;
   onManual: () => void;
   onTap: () => void;
+  onImmersiveChange?: (immersive: boolean) => void;
   onError: (message: string) => void;
 };
 type Tile = { mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>; bitmap: ImageBitmap };
@@ -40,6 +41,7 @@ export async function createGallery(options: Options) {
   let disposed = false, dirty = true, frame = 0, width = 1, height = 1;
   let moving = false, speed = 28, reduced = options.reduceMotion;
   let exiting = false;
+  let immersive: boolean | null = null;
   const pose = poseFromCamera(options.initialCamera);
   let flatWidth = pose.width;
   let transition: Transition | null = null;
@@ -238,6 +240,8 @@ export async function createGallery(options: Options) {
 
   const point = new THREE.Vector3();
   const target = new THREE.Vector3();
+  const upperEdge = new THREE.Vector3();
+  const lowerEdge = new THREE.Vector3();
   const draw = (time: number) => {
     if (disposed) return;
     frame = requestAnimationFrame(draw);
@@ -271,6 +275,21 @@ export async function createGallery(options: Options) {
     camera.up.set(0, 0, -1);
     camera.lookAt(target);
     camera.updateMatrixWorld();
+    if (!transition && !exiting) {
+      // Measure the displayed textile, not the deliberately different flat
+      // handoff camera. Sample locally so yaw does not measure all 70 metres.
+      upperEdge.set(target.x, TEXTILE.y, -TEXTILE.depth / 2).applyMatrix4(camera.matrixWorldInverse);
+      lowerEdge.set(target.x, TEXTILE.y, TEXTILE.depth / 2).applyMatrix4(camera.matrixWorldInverse);
+      const clipped = upperEdge.z >= -camera.near || lowerEdge.z >= -camera.near;
+      const fill = clipped ? Infinity : Math.abs(
+        upperEdge.applyMatrix4(camera.projectionMatrix).y - lowerEdge.applyMatrix4(camera.projectionMatrix).y,
+      ) / 2;
+      const next = Number.isNaN(fill) ? immersive ?? false : fill > (immersive ? 0.84 : 0.9);
+      if (next !== immersive) {
+        immersive = next;
+        options.onImmersiveChange?.(next);
+      }
+    }
     renderer.render(scene, camera);
     for (const marker of markers) {
       point.copy(marker.point).project(camera);

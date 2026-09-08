@@ -34,17 +34,17 @@ function step(time: number) {
 async function setup(width = 1280, height = 800) {
   const host = document.createElement('div');
   document.body.appendChild(host);
-  Object.defineProperties(host, {clientWidth: {value: width}, clientHeight: {value: height}});
-  const onMove = vi.fn(), onManual = vi.fn();
+  Object.defineProperties(host, {clientWidth: {value: width, configurable:true}, clientHeight: {value: height, configurable:true}});
+  const onMove = vi.fn(), onManual = vi.fn(), onImmersiveChange = vi.fn();
   controller = await createGallery({host, dziUrl: 'https://tiles.example/v1/bayeux.dzi',
     initialCamera: {x: .25, y: .6, width: .02, height: .8}, reduceMotion: false,
-    signal: new AbortController().signal, onMove, onManual, onTap: vi.fn(), onError: vi.fn()});
+    signal: new AbortController().signal, onMove, onManual, onImmersiveChange, onTap: vi.fn(), onError: vi.fn()});
   step(1200);
   const canvas = host.querySelector('canvas')!;
   canvas.setPointerCapture = vi.fn();
   canvas.hasPointerCapture = () => false;
   const camera = graphics.render.mock.calls.at(-1)![1] as PerspectiveCamera;
-  return {canvas, camera, onMove, onManual, controller};
+  return {canvas, camera, onMove, onManual, onImmersiveChange, controller};
 }
 
 function pointer(canvas: HTMLCanvasElement, type: string, id: number, x: number) {
@@ -118,6 +118,68 @@ describe('gallery camera and playback gestures', () => {
     pointer(canvas, 'pointerdown', 2, 100);
     controller.dispose();
     expect(surface).not.toHaveAttribute('data-grabbing');
+  });
+
+  it.each([[1280,800], [390,844]])('uses the displayed zoom with stable immersion thresholds at %s × %s', async (width,height) => {
+    const {controller, onImmersiveChange, onManual} = await setup(width,height);
+    expect(onImmersiveChange).toHaveBeenCalledExactlyOnceWith(false);
+    controller.setPlayback(true, 28);
+    let previousWidth = 3.5, time = 1250;
+    const fill = (fraction: number) => {
+      const nextWidth = Math.max(0.4, TEXTILE.depth * width / height / fraction);
+      controller.zoom(nextWidth / previousWidth);
+      previousWidth = nextWidth;
+      step(time += 50);
+    };
+    fill(0.94);
+    expect(onImmersiveChange).toHaveBeenLastCalledWith(true);
+    expect(onImmersiveChange).toHaveBeenCalledTimes(2);
+    fill(0.87);
+    step(time += 50);
+    expect(onImmersiveChange).toHaveBeenCalledTimes(2);
+    fill(0.82);
+    expect(onImmersiveChange).toHaveBeenLastCalledWith(false);
+    expect(onImmersiveChange).toHaveBeenCalledTimes(3);
+    fill(0.87);
+    expect(onImmersiveChange).toHaveBeenCalledTimes(3);
+    fill(0.94);
+    expect(onImmersiveChange).toHaveBeenLastCalledWith(true);
+    expect(onManual).not.toHaveBeenCalled();
+    onImmersiveChange.mockClear();
+    controller.exit(vi.fn(), vi.fn());
+    step(time += 2000);
+    expect(onImmersiveChange).not.toHaveBeenCalled();
+  });
+
+  it('rechecks the displayed height on resize without a new zoom gesture', async () => {
+    let resize = () => {};
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(callback: () => void) { resize = callback; }
+      observe() {}
+      disconnect() {}
+    });
+    const {canvas, onImmersiveChange} = await setup();
+    expect(onImmersiveChange).toHaveBeenLastCalledWith(false);
+    Object.defineProperty(canvas.parentElement, 'clientHeight', {value:300});
+    resize(); step(1300);
+    expect(onImmersiveChange).toHaveBeenLastCalledWith(true);
+    Object.defineProperty(canvas.parentElement, 'clientHeight', {value:800});
+    resize(); step(1400);
+    expect(onImmersiveChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it('stays immersive if extreme close-up orbit clips a textile edge behind the camera', async () => {
+    const {controller, canvas, onImmersiveChange} = await setup(1280,300);
+    controller.zoom(0.4 / 3.5);
+    pointer(canvas, 'pointerdown', 1, 100);
+    const orbit = new MouseEvent('pointermove', {clientX:100,clientY:1000,buttons:1});
+    Object.defineProperty(orbit, 'pointerId', {value:1});
+    canvas.dispatchEvent(orbit);
+    step(1300);
+    expect(onImmersiveChange).toHaveBeenLastCalledWith(true);
+    controller.zoom(10);
+    step(1400);
+    expect(onImmersiveChange).toHaveBeenLastCalledWith(false);
   });
 
   it('keeps touch pinch playing but still pauses on a one-finger drag', async () => {

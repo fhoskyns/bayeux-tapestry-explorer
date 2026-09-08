@@ -239,6 +239,13 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
   const autoPanSpeed = AUTO_PAN_SPEEDS[autoPanNotch - 1];
   const pauseAutoPan = useCallback(() => setAutoPan(false), []);
   const { immersive, edges, reveal, setImmersive } = useImmersiveControls(false);
+  const [flatImmersive, setFlatImmersive] = useState(false);
+  const [galleryImmersive, setGalleryImmersive] = useState(false);
+  const activeImmersive = (gallery || mode !== 'overview') &&
+    (gallery && !galleryClosing ? galleryImmersive : flatImmersive);
+  // Each renderer keeps its own last zoom state; only the visible owner drives
+  // edge controls. Inactive camera updates must not reset a tap-reveal timer.
+  useEffect(() => { setImmersive(activeImmersive); }, [activeImmersive, setImmersive]);
   const initializedRef = useRef(false);
   const annotationTriggerRef = useRef<HTMLElement | null>(null);
   const annotationPanelRef = useRef<HTMLDialogElement | null>(null);
@@ -564,6 +571,7 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
     if (!value || galleryClosing) return;
     // Playback is shared user intent; only the active viewer owns its animation.
     if (value === 'gallery' && !gallery) {
+      setGalleryImmersive(false);
       setCameraRequest(null);
       setGalleryCamera(liveCameraRef.current ?? { x: 0, y: 0, width: 1, height: 1 });
       setGalleryClosing(false); setGallery(true);
@@ -610,7 +618,7 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
                 onExplore={trackFlatExplore}
                 onViewportChange={trackFlatViewport}
                 onCanvasTap={reveal}
-                onImmersiveChange={gallery && !galleryClosing ? undefined : setImmersive}
+                onImmersiveChange={setFlatImmersive}
                 reduceMotion={reduceMotion}
                 scene={scene}
               />
@@ -619,6 +627,7 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
               cameraRequest={cameraRequest}
               autoPan={autoPan} speed={autoPanSpeed.pixelsPerSecond} reduceMotion={reduceMotion} scene={scene} mode={mode}
               activeAnnotationId={activeAnnotation?.id} onAnnotationActivate={activateAnnotation}
+              onImmersiveChange={setGalleryImmersive}
               onMove={galleryMove} onManual={pauseAutoPan} onTap={reveal} onPrepareFlat={prepareFlat} onClosed={closeGallery} /> : null}
           {activeAnnotation ? (
             <>

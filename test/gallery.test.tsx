@@ -13,6 +13,7 @@ const propsFor = () => ({
   dziUrl: 'https://tiles.example/v1/bayeux.dzi', initialCamera: { x: .2, y: 0, width: .02, height: 1 },
   closing: false, autoPan: false, speed: 28, reduceMotion: true, scene: tapestryManifest.scenes[6], mode: 'guided',
   onMove: vi.fn(), onManual: vi.fn(), onTap: vi.fn(), onPrepareFlat: vi.fn(), onClosed: vi.fn(), onAnnotationActivate: vi.fn(),
+  onImmersiveChange: vi.fn(),
 });
 
 describe('lazy gallery lifecycle', () => {
@@ -44,6 +45,17 @@ describe('lazy gallery lifecycle', () => {
     expect(runtime.controller.pan).toHaveBeenLastCalledWith(.375);
     expect(runtime.controller.jump).not.toHaveBeenCalled();
     expect(runtime.create).toHaveBeenCalledTimes(1);
+  });
+  it('forwards zoom immersion changes only while Gallery owns the controls', async () => {
+    const props = propsFor();
+    const view = render(<TapestryGallery {...props} />);
+    await screen.findByRole('button', {name:'Zoom in gallery'});
+    const notify = runtime.create.mock.calls[0][0].onImmersiveChange;
+    act(() => { notify(true); });
+    expect(props.onImmersiveChange).toHaveBeenCalledExactlyOnceWith(true);
+    view.rerender(<TapestryGallery {...props} closing />);
+    act(() => { notify(false); });
+    expect(props.onImmersiveChange).toHaveBeenCalledOnce();
   });
   it('prepares the exact flat camera before completing the reduced-motion exit', async () => {
     const props = propsFor();

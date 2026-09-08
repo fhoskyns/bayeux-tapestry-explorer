@@ -9,9 +9,12 @@ import type { ComponentProps } from 'react';
 import type { TapestryGallery } from '@/components/tapestry-gallery';
 
 vi.mock('@/components/tapestry-gallery', () => ({
-  TapestryGallery: ({ autoPan, speed, closing, onClosed, onPrepareFlat, onMove, cameraRequest }: ComponentProps<typeof TapestryGallery>) => (
+  TapestryGallery: ({ autoPan, speed, closing, onClosed, onPrepareFlat, onMove, cameraRequest, onImmersiveChange, onTap }: ComponentProps<typeof TapestryGallery>) => (
     <div data-testid="mock-gallery" data-auto-pan={String(autoPan)} data-auto-pan-speed={speed} data-camera-request={JSON.stringify(cameraRequest)}>
       <button type="button" onClick={() => onMove({x: .25, y: -.2, width: .05, height: 1.4})}>Report gallery camera</button>
+      <button type="button" onClick={() => onImmersiveChange(true)}>Gallery close-up</button>
+      <button type="button" onClick={() => onImmersiveChange(false)}>Gallery wide view</button>
+      <button type="button" onClick={onTap}>Tap gallery canvas</button>
       {closing ? <button type="button" onClick={() => {
         onPrepareFlat({ x: .2, y: 0, width: .02, height: 1 });
         onClosed();
@@ -26,7 +29,7 @@ vi.mock('@/lib/satellite-flight', () => ({
 }));
 
 vi.mock('@/components/tapestry-viewer', () => ({
-  TapestryViewer: ({ autoPan, autoPanSpeed, onAutoPanPause, initialViewport, mode, onExplore, onViewportChange, onCameraChange, cameraRequest, reduceMotion, scene }: {
+  TapestryViewer: ({ autoPan, autoPanSpeed, onAutoPanPause, initialViewport, mode, onExplore, onViewportChange, onCameraChange, cameraRequest, reduceMotion, scene, onImmersiveChange }: {
     autoPan?: boolean;
     autoPanSpeed?: number;
     onAutoPanPause?: () => void;
@@ -38,6 +41,7 @@ vi.mock('@/components/tapestry-viewer', () => ({
     cameraRequest?: { x: number; y: number; width: number; height: number } | null;
     reduceMotion: boolean;
     scene: { id: string } | null;
+    onImmersiveChange?: (immersive: boolean) => void;
   }) => (
     <div
       data-initial-viewport={initialViewport ? JSON.stringify(initialViewport) : ''}
@@ -51,6 +55,8 @@ vi.mock('@/components/tapestry-viewer', () => ({
     >
       <span>{scene ? `viewer scene ${scene.id}` : 'viewer overview'}</span>
       <button type="button" onClick={() => onCameraChange?.({x: .25, y: -.2, width: .05, height: 1.4})}>Report flat camera</button>
+      <button type="button" onClick={() => onImmersiveChange?.(true)}>Flat close-up</button>
+      <button type="button" onClick={() => onImmersiveChange?.(false)}>Flat wide view</button>
       <button onClick={() => onExplore(0.52)} type="button">Simulate a pan</button>
       <button onClick={onAutoPanPause} type="button">Simulate manual interruption</button>
       <button
@@ -206,6 +212,54 @@ describe('guided tour interactions', () => {
     expect(screen.getByTestId('mock-viewer')).toHaveAttribute('data-auto-pan', 'true');
     expect(screen.getByTestId('mock-viewer')).toHaveAttribute('data-auto-pan-speed', '14');
     expect(screen.getByRole('button', { name: 'Pause auto-pan' })).toBeInTheDocument();
+  });
+
+  it('hides Gallery chrome at close zoom, retaining tap/edge reveal and uninterrupted playback', () => {
+    vi.stubEnv('VITE_TAPESTRY_TILE_BASE_URL', 'https://tiles.example/v1');
+    window.history.replaceState(null, '', '/?scene=07');
+    const view = render(<TapestryExplorer manifest={tapestryManifest} />);
+    const stage = view.container.querySelector('.explorer-stage')!;
+    fireEvent.click(screen.getByRole('button', {name:'Play auto-pan'}));
+    fireEvent.click(screen.getByRole('button', {name:'Gallery'}));
+    fireEvent.click(screen.getByRole('button', {name:'Gallery close-up'}));
+    expect(stage).toHaveAttribute('data-top-open', 'false');
+    expect(stage).toHaveAttribute('data-bottom-open', 'false');
+    expect(screen.getByTestId('mock-gallery')).toHaveAttribute('data-auto-pan', 'true');
+    fireEvent.pointerMove(window, {clientX:300,clientY:10});
+    expect(stage).toHaveAttribute('data-top-open', 'true');
+    fireEvent.pointerMove(window, {clientX:300,clientY:window.innerHeight/2});
+    expect(stage).toHaveAttribute('data-top-open', 'false');
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(screen.getByRole('button', {name:'Tap gallery canvas'}));
+      expect(stage).toHaveAttribute('data-bottom-open', 'true');
+      fireEvent.click(screen.getByRole('button', {name:'Gallery close-up'}));
+      act(() => { vi.advanceTimersByTime(4100); });
+      expect(stage).toHaveAttribute('data-bottom-open', 'false');
+      expect(stage).toHaveAttribute('data-top-open', 'false');
+      fireEvent.click(screen.getByRole('button', {name:'Gallery wide view'}));
+      expect(stage).toHaveAttribute('data-top-open', 'true');
+      expect(stage).toHaveAttribute('data-bottom-open', 'true');
+      expect(screen.getByRole('button', {name:'Pause auto-pan'})).toBeInTheDocument();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it.each([true,false])('restores the flat view’s own immersion (%s) after leaving Gallery', (flatClose) => {
+    vi.stubEnv('VITE_TAPESTRY_TILE_BASE_URL', 'https://tiles.example/v1');
+    window.history.replaceState(null, '', '/?scene=07');
+    const view = render(<TapestryExplorer manifest={tapestryManifest} />);
+    const stage = view.container.querySelector('.explorer-stage')!;
+    fireEvent.click(screen.getByRole('button', {name:flatClose ? 'Flat close-up' : 'Flat wide view'}));
+    fireEvent.click(screen.getByRole('button', {name:'Gallery'}));
+    // The Gallery entry starts wide, even if the previous flat view was close.
+    expect(stage).toHaveAttribute('data-top-open', 'true');
+    fireEvent.click(screen.getByRole('button', {name:flatClose ? 'Gallery wide view' : 'Gallery close-up'}));
+    fireEvent.click(screen.getByRole('button', {name:flatClose ? 'Flat close-up' : 'Flat wide view'}));
+    expect(stage).toHaveAttribute('data-top-open', String(flatClose));
+    fireEvent.click(screen.getByRole('button', {name:'Bird’s-eye'}));
+    fireEvent.click(screen.getByRole('button', {name:'Complete gallery handoff'}));
+    expect(stage).toHaveAttribute('data-top-open', String(!flatClose));
+    expect(stage).toHaveAttribute('data-bottom-open', String(!flatClose));
   });
 
   it.each([false, true])('respects paused playback across the handoff (pause during exit: %s)', (pauseDuringExit) => {
