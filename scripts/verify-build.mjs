@@ -1,8 +1,13 @@
 import { access, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
+import { buildTileBase, htmlFiles, verifySecureHtml } from './secure-static-build.mjs';
 
 const root = process.cwd();
+const tileBase = buildTileBase(root);
+for (const filename of await htmlFiles(path.join(root, 'dist/client'))) {
+  verifySecureHtml(await readFile(filename, 'utf8'), tileBase);
+}
 const reportPath = path.join(root, 'dist/server/vinext-prerender.json');
 const report = JSON.parse(await readFile(reportPath, 'utf8'));
 const failures = report.routes.filter((route) => route.status !== 'rendered');

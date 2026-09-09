@@ -1,3 +1,7 @@
 allowBuilds:
   esbuild: true
   workerd: true
+
+# Match the already-verified image toolchain; do not regenerate imagery.
+overrides:
+  'sharp@<0.35.4': 0.35.4
