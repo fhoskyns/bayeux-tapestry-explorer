@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 
 const deploymentEnvironment = process.env.VERCEL_TARGET_ENV ?? process.env.VERCEL_ENV;
 const isVercelBuild = process.argv.includes('--vercel-build') || process.env.VERCEL === '1';
@@ -21,7 +22,7 @@ if (deploymentEnvironment !== 'production') {
   process.exit(0);
 }
 
-console.log('Vercel production build detected; enforcing the complete release gate.');
+console.log('Vercel production build detected; enforcing the configured publication gate.');
 
 const tileBase = process.env.VITE_TAPESTRY_TILE_BASE_URL?.trim();
 let tileBaseUrl;
@@ -51,7 +52,16 @@ if (!validTileBase) {
 }
 
 console.log(`Verified production Deep Zoom origin: ${tileBaseUrl.origin}${tileBaseUrl.pathname}`);
-const result = spawnSync(process.execPath, ['scripts/validate-content.mjs', '--release'], {
+let channel;
+try {
+  channel = JSON.parse(readFileSync('data/publication-policy.json', 'utf8')).channel;
+  if (!['public-beta', 'audited-release'].includes(channel)) throw new Error('Unknown publication channel.');
+} catch (error) {
+  console.error(`Production requires an explicit publication policy: ${error.message}`);
+  process.exit(1);
+}
+console.log(`Publication channel: ${channel}. Editorial audit statuses are unchanged.`);
+const result = spawnSync(process.execPath, ['scripts/validate-content.mjs', channel === 'public-beta' ? '--public-beta' : '--release'], {
   stdio: 'inherit',
 });
 

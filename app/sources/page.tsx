@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { ArrowLeft, ExternalLink, FileCheck2, GitBranch, Scale } from 'lucide-react';
 
 import { tapestryManifest } from '@/data/tapestry-manifest';
+import publicationPolicy from '@/data/publication-policy.json';
 
 export const metadata: Metadata = {
   title: 'Sources & rights · The Bayeux Tapestry, Thread by Thread',
@@ -31,8 +32,9 @@ export default function SourcesPage() {
         <p className="eyebrow">Provenance · scholarship · reuse</p>
         <h1>Sources &amp; rights</h1>
         <p>
-          This independent {isEditorialPreview ? 'editorial preview' : 'interactive edition'} presents the surviving narrative through Wikimedia Commons images. It is not affiliated with, endorsed by, or certified by the City of Bayeux, the Bayeux Museum, Wikimedia Commons, UNESCO, or any cited author or institution.
+          This independent {isEditorialPreview ? 'public beta' : 'interactive edition'} presents the surviving narrative through Wikimedia Commons images. It is not affiliated with, endorsed by, or certified by the City of Bayeux, the Bayeux Museum, Wikimedia Commons, UNESCO, or any cited author or institution.
         </p>
+        {isEditorialPreview ? <p>{publicationPolicy.notice}</p> : null}
       </section>
 
       <section className="rights-grid" aria-label="Rights and provenance summary">
@@ -103,7 +105,7 @@ export default function SourcesPage() {
             Scene titles, summaries, English translations and annotation prose are newly written {isEditorialPreview ? 'drafts ' : ''}for this project. Commentary is paraphrased rather than copied. Notes distinguish observation, context, interpretation or conservation, name their current references, and identify contested readings.
           </p>
           <p>
-            The visible ending is treated as the end of the surviving embroidery—not proof of the work&apos;s original ending. Nothing missing is reconstructed. {isEditorialPreview ? 'Production publication is pending scholarly review and verification of the final image coordinates.' : 'The published editorial record and image coordinates have completed the project’s documented review gate.'}
+            The visible ending is treated as the end of the surviving embroidery—not proof of the work&apos;s original ending. Nothing missing is reconstructed. {isEditorialPreview ? 'This public beta is available before scholarly review and verification of the final image coordinates are complete.' : 'The published editorial record and image coordinates have completed the project’s documented review gate.'}
           </p>
           <p>
             Transcription is diplomatic in intent: stitched case, unusual letter forms and separate labels are retained where the research images permit. {isEditorialPreview ? 'Conventions vary between the two draft source sets and remain subject to palaeographic review.' : 'The published transcription conventions are recorded in the final editorial audit.'} For Harold, the project renders Latin <i>dux</i> contextually as “earl.”

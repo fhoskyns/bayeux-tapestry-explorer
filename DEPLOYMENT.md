@@ -1,6 +1,6 @@
 # Deployment and release runbook
 
-Production promotion is deliberately gated. The owner explicitly authorized R2 activation and connecting the verified full panorama to the editorial preview on 7 September 2026, relying on the selected Commons reproduction despite the recorded source-terms conflict. This permits technical preview testing; it is not museum permission, scholarly approval, or a waiver of the production gate. Do not connect the production alias until every item in [PROVENANCE.md](./PROVENANCE.md) is evidenced and `pnpm release:check` passes.
+On 9 September 2026 the owner explicitly approved production publication as a **public beta**, overriding the requirement to finish the scholarly/publication review first, on condition that unfinished-review and rights notices remain on Sources & Rights. [publication-policy.json](./data/publication-policy.json) records that limited authorization. It is not museum permission, scholarly approval or a completed rights review. The beta gate retains structural validation, exact source identity, full pixel/seam verification, hosted tile evidence and the verified production origin. `pnpm release:check` remains the separate, stricter audited-release gate described in [PROVENANCE.md](./PROVENANCE.md); no draft or unresolved status is changed by beta publication.
 
 ## Provisioning status — 7 September 2026
 
@@ -23,9 +23,9 @@ The Vercel project uses:
 - output: `dist/client`
 - production branch: `main`
 
-Until the verified Worker exists, omit `VITE_TAPESTRY_TILE_BASE_URL`. The preview will clearly identify its resized Wikimedia Commons images. With Vercel system variables exposed, `guard:vercel` detects the Production target, requires an HTTPS `bayeux-tiles.<account>.workers.dev/v1` origin, and runs the full release check. It intentionally fails while the tile origin or any scholarly, rights, calibration, or DZI evidence is missing. Preview builds remain available for review.
+Until the verified Worker exists, omit `VITE_TAPESTRY_TILE_BASE_URL` in Preview. With Vercel system variables exposed, `guard:vercel` detects the Production target, requires an HTTPS `bayeux-tiles.<account>.workers.dev/v1` origin matching the hosted verification evidence, and runs the gate selected by the tracked publication policy (`public-beta` or `audited-release`). Unknown or absent policies fail closed. Both channels require full image-integrity evidence; only audited release requires completed scholarly, rights and calibration review. Preview builds remain available for review.
 
-In the Vercel project settings, enable **Automatically expose System Environment Variables**. The Vercel-specific guard invocation reads `VERCEL_TARGET_ENV` first and falls back to `VERCEL_ENV`; if neither value is available, it fails closed. Confirm that a Preview build log says `Production release gate skipped for preview build` and that a staged Production build remains red until all release evidence is present.
+In the Vercel project settings, enable **Automatically expose System Environment Variables**. The Vercel-specific guard invocation reads `VERCEL_TARGET_ENV` first and falls back to `VERCEL_ENV`; if neither value is available, it fails closed. Confirm that a Preview build log says `Production release gate skipped for preview build` and that Production logs its real target and selected publication channel. Never spoof the environment to bypass the guard.
 
 ## 2. Cloudflare storage boundaries
 
@@ -55,13 +55,13 @@ After the committed report has been independently reviewed, set `image.dziVerifi
 
 ## 4. Production connection
 
-For the owner-authorized technical preview, set the following only in Preview, scoped to `preview/initial-review`, after full local and remote tile verification. Production must remain unset until `pnpm release:check` passes:
+For the owner-authorized public beta, set the following in Production after full local and remote tile verification; preserve the existing Preview value scoped to `preview/initial-review`:
 
 ```text
 VITE_TAPESTRY_TILE_BASE_URL=https://bayeux-tiles.bayeux-tapestry-deepzoom-infrastructure.workers.dev/v1
 ```
 
-Push the release candidate to a non-production branch and use its commit-specific Vercel Preview URL to exercise overview, all scene transitions, free exploration, URL restoration, annotations, keyboard navigation, reduced motion, and HTTP smoke checks. Merge that exact reviewed commit into `main` only after the candidate passes. Vercel then reruns the production guard and static build for the production deployment from `main`; immediately repeat the HTTP smoke checks against `bayeux-tapestry-explorer.vercel.app` and roll back if they fail.
+Run `pnpm check`, `pnpm beta:check` and the production guard with the real Production environment and tile URL. Keep the unfinished-review and image-rights notices intact in the rendered Sources & Rights output. Push the release candidate to a non-production branch and confirm CI; then fast-forward that exact reviewed commit into `main`. Vercel reruns the production guard and static build for the production deployment from `main`. Confirm the target is Production and repeat unauthenticated HTTP smoke checks against the assigned production domain, including the Sources notices and representative image requests; roll back if they fail. An eventual audited release must instead pass `pnpm release:check` before switching the tracked publication channel to `audited-release`.
 
 ## 5. Operations
 

@@ -23,4 +23,20 @@ for (const filename of ['index.html', 'sources.html', '404.html']) {
   }
 }
 
+const policy = JSON.parse(await readFile(path.join(root, 'data/publication-policy.json'), 'utf8'));
+if (policy.channel === 'public-beta') {
+  const sources = await readFile(path.join(root, 'dist/client/sources.html'), 'utf8');
+  const { image } = JSON.parse(await readFile(path.join(root, 'data/tapestry-manifest.json'), 'utf8'));
+  const rightsNotice = image.rightsStatus === 'documented-for-publication'
+    ? image.rightsPublicationRecord?.publicNotice ?? image.rightsNotice
+    : image.rightsNotice;
+  const escapeHtml = (text) => text.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#x27;' })[character]);
+  if (typeof policy.notice !== 'string' || typeof rightsNotice !== 'string' || !rightsNotice.trim() ||
+      !sources.includes(escapeHtml(policy.notice)) || !sources.includes(escapeHtml(rightsNotice)) ||
+      !sources.includes('Museum reuse terms') || !sources.includes('Corrections and takedown requests')) {
+    console.error('Public-beta output must retain the unfinished-review and image-rights notices, museum reuse terms and correction route.');
+    process.exit(1);
+  }
+}
+
 console.log(`Verified ${report.routes.length} rendered static routes and required HTML outputs.`);

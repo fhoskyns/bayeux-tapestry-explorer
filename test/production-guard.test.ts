@@ -61,7 +61,7 @@ describe('production deployment guard', () => {
     expect(malformed.stderr).toContain('https://bayeux-tiles.<account>.workers.dev/v1');
   });
 
-  it('accepts the planned Worker origin before applying the editorial release gate', () => {
+  it('rejects a valid-looking Worker origin that is not the verified host', () => {
     const result = runGuard({
       VERCEL: '1',
       VERCEL_ENV: undefined,
@@ -72,6 +72,19 @@ describe('production deployment guard', () => {
     expect(result.stdout).toContain(
       'Verified production Deep Zoom origin: https://bayeux-tiles.example-account.workers.dev/v1',
     );
-    expect(`${result.stdout}\n${result.stderr}`).toContain('Scene 01 is not audited for release.');
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('configured tile origin differs from the verified hosted origin');
+  });
+
+  it('allows the authorized beta with the exact verified tile origin', () => {
+    const result = runGuard({
+      VERCEL: '1',
+      VERCEL_ENV: 'production',
+      VERCEL_TARGET_ENV: 'production',
+      VITE_TAPESTRY_TILE_BASE_URL: 'https://bayeux-tiles.bayeux-tapestry-deepzoom-infrastructure.workers.dev/v1',
+    });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('Publication channel: public-beta');
+    expect(result.stdout).toContain('editorial review remains incomplete');
   });
 });

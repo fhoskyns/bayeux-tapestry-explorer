@@ -5,10 +5,24 @@ import process from 'node:process';
 const root = process.cwd();
 const manifest = JSON.parse(await readFile(path.join(root, 'data/tapestry-manifest.json'), 'utf8'));
 const release = process.argv.includes('--release') || manifest.editorial?.status === 'publication-ready';
+const publicBeta = process.argv.includes('--public-beta');
 const failures = [];
 
 function fail(message) {
   failures.push(message);
+}
+
+if (publicBeta) {
+  try {
+    const policy = JSON.parse(await readFile(path.join(root, 'data/publication-policy.json'), 'utf8'));
+    if (policy.schemaVersion !== 1 || policy.channel !== 'public-beta' || policy.approvedBy !== 'project-owner' ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(policy.approvedAt) || typeof policy.scope !== 'string' || policy.scope.length < 40 ||
+        policy.imageSha256 !== manifest.image.sha256 || typeof policy.notice !== 'string' || policy.notice.length < 100) {
+      fail('Public beta requires explicit owner authorization, the locked image and an unfinished-review/rights notice.');
+    }
+  } catch (error) {
+    fail(`Public-beta authorization could not be validated: ${error.message}`);
+  }
 }
 
 function isAuditRecord(record) {
@@ -141,6 +155,11 @@ if (release) {
   if (!isRightsPublicationRecord(manifest.image?.rightsPublicationRecord)) {
     fail('The image publication basis lacks a reviewed evidence record and public notice.');
   }
+}
+
+// Public beta relaxes only the editorial/publication-review requirement, not
+// source identity, pixel integrity, complete coverage or hosted tile evidence.
+if (release || publicBeta) {
   if (manifest.image?.dziVerificationStatus !== 'verified') {
     fail('The public Deep Zoom derivative is not marked as verified.');
   }
@@ -200,6 +219,13 @@ if (release) {
     ) {
       fail('Deep Zoom report toolchain differs from the source lock.');
     }
+    const remote = JSON.parse(await readFile(path.join(root, 'release-evidence/deepzoom-v1-remote-verification.json'), 'utf8'));
+    if (remote.schemaVersion !== 1 || remote.result !== 'pass' || remote.sourceSha256 !== manifest.image.sha256 ||
+        remote.tileCount !== expectedTileCount || remote.objectCount !== expectedTileCount + 1 || !/^[a-f0-9]{64}$/.test(remote.inventorySha256)) {
+      fail('Hosted Deep Zoom evidence does not prove complete verified delivery of the locked image.');
+    }
+    const tileBase = process.env.VITE_TAPESTRY_TILE_BASE_URL?.trim();
+    if (tileBase && tileBase !== `${remote.origin}/v1`) fail('The configured tile origin differs from the verified hosted origin.');
   } catch (error) {
     fail(`The Deep Zoom verification record could not be validated: ${error.message}`);
   }
@@ -211,5 +237,5 @@ if (failures.length) {
 }
 
 console.log(
-  `Validated ${manifest.scenes.length} scenes, ${annotationIds.size} annotations and ${sourceIds.size} sources${release ? ' for release' : ' as a structural editorial draft'}.`,
+  `Validated ${manifest.scenes.length} scenes, ${annotationIds.size} annotations and ${sourceIds.size} sources${release ? ' for audited release' : publicBeta ? ' for an owner-authorized public beta; editorial review remains incomplete' : ' as a structural editorial draft'}.`,
 );

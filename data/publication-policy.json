@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "channel": "public-beta",
+  "approvedBy": "project-owner",
+  "approvedAt": "2026-09-09",
+  "scope": "Production public beta approved with unfinished editorial review and image-rights notices retained on Sources & Rights. This is not scholarly approval, museum permission, or a completed rights review.",
+  "imageSha256": "dc6717cc882a42984d328a58021b7d97a081ce0c0549c35057c34e1d16eca6b5",
+  "notice": "This is a public beta. The transcriptions, translations, commentary, citation locators and scene and annotation positions have not completed scholarly review. They may contain errors. Image reuse remains subject to the rights notices below; public availability does not imply museum permission or endorsement."
+}

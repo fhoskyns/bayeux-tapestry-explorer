@@ -17,6 +17,7 @@
     "typecheck": "tsc --noEmit",
     "validate:content": "node scripts/validate-content.mjs",
     "release:check": "node scripts/validate-content.mjs --release",
+    "beta:check": "node scripts/validate-content.mjs --public-beta",
     "guard:production": "node scripts/guard-production.mjs",
     "guard:vercel": "node scripts/guard-production.mjs --vercel-build",
     "verify:build": "node scripts/verify-build.mjs",

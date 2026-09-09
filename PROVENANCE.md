@@ -41,3 +41,5 @@ Production promotion requires all of the following:
 5. A passing static build, browser interaction checks, and HTTP smoke tests.
 
 The normal development check permits explicitly labelled drafts. `pnpm release:check` requires a reviewed rights-publication record and global editorial record in addition to item-level audits, and remains intentionally red until every publication gate has evidence.
+
+On 9 September 2026 the owner separately authorized a production public beta before those reviews are finished, with the unfinished-review and rights notices retained on Sources & Rights. The tracked [publication policy](./data/publication-policy.json) records this limited decision. `pnpm beta:check` preserves the full image-integrity and hosted-delivery gates; it does not convert draft content into audited content or resolve the museum source-terms conflict. The verified Worker may now be connected to Production under this beta authorization, superseding the preview-only connection described in the 7 September record above.

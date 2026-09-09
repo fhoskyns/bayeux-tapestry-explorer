@@ -4,7 +4,7 @@ An English-first, non-commercial interactive exploration of the complete survivi
 
 ## Status
 
-This repository is an **editorial and technical preview**, not a production publication. It contains all 58 modern museum scene divisions and 116 draft notes, but every transcription, translation, citation locator, scene boundary, and hotspot position still requires specialist review. The release check is designed to fail until that evidence exists.
+This repository is an **owner-authorized public beta**, approved on 9 September 2026 with unfinished-review and image-rights notices retained on Sources & Rights. It contains all 58 modern museum scene divisions and 116 draft notes, but every transcription, translation, citation locator, scene boundary, and hotspot position still requires specialist review. Public availability does not imply scholarly approval, museum permission or endorsement. The strict audited-release check remains intentionally red until its evidence exists.
 
 The complete lossless Deep Zoom pyramid passed a fresh full verification on 7 September 2026 (London time): 3,899 tiles, 6,816 seams, and pixel equality against the locked master for all 2,826 native-resolution tiles. All 3,900 hosted objects (tiles plus DZI) also passed an exhaustive read-back SHA-256 check through the Cloudflare Worker. Both the [pixel verification](./release-evidence/deepzoom-v1-verification.json) and [hosted delivery verification](./release-evidence/deepzoom-v1-remote-verification.json) reports are tracked; imagery remains outside Git. This technical result does not constitute editorial approval or publication clearance.
 
@@ -33,16 +33,17 @@ pnpm dev
 ```
 
 Without `VITE_TAPESTRY_TILE_BASE_URL`, the app deliberately uses resized Wikimedia Commons preview imagery. No credential is ever exposed to the browser.
-Without that configuration, dragging is within the selected source image. The `preview/initial-review` Vercel environment now uses the verified Deep Zoom host for continuous panning across the entire original. Separate fallback photographs are never stitched together as a purported accurate facsimile.
+Without that configuration, dragging is within the selected source image. The production public beta and `preview/initial-review` Vercel environment use the verified Deep Zoom host for continuous panning across the entire original. Separate fallback photographs are never stitched together as a purported accurate facsimile.
 
 ## Checks
 
 ```sh
 pnpm check
+pnpm beta:check
 pnpm release:check
 ```
 
-`pnpm check` validates the draft data contract, types, lint, interactions, and the complete static export. Once the manifest is marked `publication-ready`, its content validator automatically enforces the full release gate in CI. `pnpm release:check` invokes that gate explicitly: it requires global editorial approval, a documented image-publication basis, audited content with evidence-bearing review records, and a passing full-pixel Deep Zoom verification report.
+`pnpm check` validates the draft data contract, types, lint, interactions, and the complete static export, including the required public-beta notices. `pnpm beta:check` additionally validates the owner's recorded authorization and the full local and remote image-integrity evidence. Production selects its gate from [publication-policy.json](./data/publication-policy.json), requires the verified tile origin, and never changes the true audit or rights statuses. Once the manifest is marked `publication-ready`, its content validator automatically enforces the full release gate in CI. `pnpm release:check` invokes that gate explicitly: it requires global editorial approval, a documented image-publication basis, audited content with evidence-bearing review records, and passing local and hosted Deep Zoom verification reports.
 
 The tile generator and Worker have their own tested package:
 
@@ -64,7 +65,7 @@ See [PROVENANCE.md](./PROVENANCE.md), [DEPLOYMENT.md](./DEPLOYMENT.md), and [inf
 
 ## Corrections and rights concerns
 
-Open a GitHub issue with the scene number, source, and requested correction. Do not attach copyrighted source imagery or private personal information. A private operator contact will be added before production publication.
+Open a [GitHub issue](https://github.com/fhoskyns/bayeux-tapestry-explorer/issues/new) with the scene number, source, and requested correction or takedown. Do not attach copyrighted source imagery or private personal information. This public-beta route is public; no private operator contact has been configured.
 
 ## Licences
 
