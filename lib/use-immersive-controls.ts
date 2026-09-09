@@ -44,12 +44,19 @@ export function useImmersiveControls(initialImmersive = true) {
     const keyboard = (event: KeyboardEvent) => {
       if (event.key === 'Tab') { window.clearTimeout(timer.current); setControls((current) => ({...current, edges: { top: true, bottom: true }})); }
     };
+    const leaveWindow = () => { window.clearTimeout(timer.current); hide(); };
     window.addEventListener('pointermove', pointer, { passive: true });
     window.addEventListener('keydown', keyboard);
+    // A hover-held playback dock must not leave the footer latched open when
+    // the pointer exits the page without another move over the canvas.
+    document.documentElement.addEventListener('pointerleave', leaveWindow);
+    window.addEventListener('blur', leaveWindow);
     return () => {
       window.clearTimeout(timer.current);
       window.removeEventListener('pointermove', pointer);
       window.removeEventListener('keydown', keyboard);
+      document.documentElement.removeEventListener('pointerleave', leaveWindow);
+      window.removeEventListener('blur', leaveWindow);
     };
   }, [hide, immersive]);
 

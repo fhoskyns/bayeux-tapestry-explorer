@@ -20,7 +20,7 @@ type Props = {
   onMove: (camera: ViewerViewport) => void;
   onManual: () => void;
   onTap: () => void;
-  onImmersiveChange: (immersive: boolean) => void;
+  onImmersiveChange?: (immersive: boolean) => void;
   onPrepareFlat: (camera: ViewerViewport) => void;
   onClosed: () => void;
   onAnnotationActivate: (annotation: Annotation, trigger: HTMLElement) => void;
@@ -46,7 +46,7 @@ export function TapestryGallery(props: Props) {
       return createGallery({ host, dziUrl: context.current.dziUrl, initialCamera: context.current.initialCamera,
         reduceMotion: context.current.reduceMotion, signal: abort.signal,
         onMove: (camera) => context.current.onMove(camera),
-        onImmersiveChange: (immersive) => { if (!context.current.closing) context.current.onImmersiveChange(immersive); },
+        onImmersiveChange: (immersive) => { if (!context.current.closing) context.current.onImmersiveChange?.(immersive); },
         onManual: () => context.current.onManual(), onTap: () => context.current.onTap(), onError: setError });
     }).then((controller) => {
       if (!controller || abort.signal.aborted) { controller?.dispose(); return; }
