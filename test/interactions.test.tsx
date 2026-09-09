@@ -12,8 +12,8 @@ vi.mock('@/components/tapestry-gallery', () => ({
   TapestryGallery: ({ autoPan, speed, closing, onClosed, onPrepareFlat, onMove, cameraRequest, onImmersiveChange, onTap }: ComponentProps<typeof TapestryGallery>) => (
     <div data-testid="mock-gallery" data-auto-pan={String(autoPan)} data-auto-pan-speed={speed} data-camera-request={JSON.stringify(cameraRequest)}>
       <button type="button" onClick={() => onMove({x: .25, y: -.2, width: .05, height: 1.4})}>Report gallery camera</button>
-      <button type="button" onClick={() => onImmersiveChange(true)}>Gallery close-up</button>
-      <button type="button" onClick={() => onImmersiveChange(false)}>Gallery wide view</button>
+      <button type="button" onClick={() => onImmersiveChange?.(true)}>Gallery close-up</button>
+      <button type="button" onClick={() => onImmersiveChange?.(false)}>Gallery wide view</button>
       <button type="button" onClick={onTap}>Tap gallery canvas</button>
       {closing ? <button type="button" onClick={() => {
         onPrepareFlat({ x: .2, y: 0, width: .02, height: 1 });
@@ -214,13 +214,16 @@ describe('guided tour interactions', () => {
     expect(screen.getByRole('button', { name: 'Pause auto-pan' })).toBeInTheDocument();
   });
 
-  it('hides Gallery chrome at close zoom, retaining tap/edge reveal and uninterrupted playback', () => {
+  it('hides Gallery chrome at every zoom, retaining tap/edge reveal and uninterrupted playback', () => {
     vi.stubEnv('VITE_TAPESTRY_TILE_BASE_URL', 'https://tiles.example/v1');
     window.history.replaceState(null, '', '/?scene=07');
     const view = render(<TapestryExplorer manifest={tapestryManifest} />);
     const stage = view.container.querySelector('.explorer-stage')!;
     fireEvent.click(screen.getByRole('button', {name:'Play auto-pan'}));
     fireEvent.click(screen.getByRole('button', {name:'Gallery'}));
+    // No close-up threshold is required, including the initial wide view.
+    expect(stage).toHaveAttribute('data-top-open', 'false');
+    expect(stage).toHaveAttribute('data-bottom-open', 'false');
     fireEvent.click(screen.getByRole('button', {name:'Gallery close-up'}));
     expect(stage).toHaveAttribute('data-top-open', 'false');
     expect(stage).toHaveAttribute('data-bottom-open', 'false');
@@ -238,9 +241,37 @@ describe('guided tour interactions', () => {
       expect(stage).toHaveAttribute('data-bottom-open', 'false');
       expect(stage).toHaveAttribute('data-top-open', 'false');
       fireEvent.click(screen.getByRole('button', {name:'Gallery wide view'}));
+      expect(stage).toHaveAttribute('data-top-open', 'false');
+      expect(stage).toHaveAttribute('data-bottom-open', 'false');
+      // Tapping still gives a temporary reveal at wide zoom, not a sticky footer.
+      fireEvent.click(screen.getByRole('button', {name:'Tap gallery canvas'}));
       expect(stage).toHaveAttribute('data-top-open', 'true');
       expect(stage).toHaveAttribute('data-bottom-open', 'true');
+      act(() => { vi.advanceTimersByTime(4100); });
+      expect(stage).toHaveAttribute('data-top-open', 'false');
+      expect(stage).toHaveAttribute('data-bottom-open', 'false');
       expect(screen.getByRole('button', {name:'Pause auto-pan'})).toBeInTheDocument();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('hides Gallery entered from Overview, but keeps wide Bird’s-eye and Overview controls visible', () => {
+    vi.useFakeTimers();
+    vi.stubEnv('VITE_TAPESTRY_TILE_BASE_URL', 'https://tiles.example/v1');
+    try {
+      const view = render(<TapestryExplorer manifest={tapestryManifest} />);
+      const stage = view.container.querySelector('.explorer-stage')!;
+      fireEvent.click(screen.getByRole('button', {name:'Gallery'}));
+      act(() => { vi.advanceTimersByTime(5000); });
+      expect(stage).toHaveAttribute('data-bottom-open', 'false');
+      fireEvent.click(screen.getByRole('button', {name:'Bird’s-eye'}));
+      fireEvent.click(screen.getByRole('button', {name:'Complete gallery handoff'}));
+      act(() => { vi.advanceTimersByTime(10000); });
+      expect(stage).toHaveAttribute('data-top-open', 'true');
+      expect(stage).toHaveAttribute('data-bottom-open', 'true');
+      fireEvent.click(screen.getByRole('button', {name:'Overview — complete tapestry'}));
+      act(() => { vi.advanceTimersByTime(10000); });
+      expect(stage).toHaveAttribute('data-top-open', 'true');
+      expect(stage).toHaveAttribute('data-bottom-open', 'true');
     } finally { vi.useRealTimers(); }
   });
 
@@ -251,11 +282,11 @@ describe('guided tour interactions', () => {
     const stage = view.container.querySelector('.explorer-stage')!;
     fireEvent.click(screen.getByRole('button', {name:flatClose ? 'Flat close-up' : 'Flat wide view'}));
     fireEvent.click(screen.getByRole('button', {name:'Gallery'}));
-    // The Gallery entry starts wide, even if the previous flat view was close.
-    expect(stage).toHaveAttribute('data-top-open', 'true');
+    // Gallery hides at both zoom levels, independently of the flat camera.
+    expect(stage).toHaveAttribute('data-top-open', 'false');
     fireEvent.click(screen.getByRole('button', {name:flatClose ? 'Gallery wide view' : 'Gallery close-up'}));
     fireEvent.click(screen.getByRole('button', {name:flatClose ? 'Flat close-up' : 'Flat wide view'}));
-    expect(stage).toHaveAttribute('data-top-open', String(flatClose));
+    expect(stage).toHaveAttribute('data-top-open', 'false');
     fireEvent.click(screen.getByRole('button', {name:'Bird’s-eye'}));
     fireEvent.click(screen.getByRole('button', {name:'Complete gallery handoff'}));
     expect(stage).toHaveAttribute('data-top-open', String(!flatClose));
