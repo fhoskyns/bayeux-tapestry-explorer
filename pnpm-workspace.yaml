@@ -2,3 +2,11 @@ allowBuilds:
   esbuild: true
   sharp: true
   workerd: true
+
+# Security fixes for transitive tooling pinned by the framework. Keep these
+# explicit until upstream constraints include the patched versions.
+overrides:
+  'ws@<8.21.0': 8.21.0
+  'undici@>=7 <7.29.0': 7.29.0
+  'esbuild@>=0.27.3 <0.28.1': 0.28.1
+  'sharp@<0.35.4': 0.35.4

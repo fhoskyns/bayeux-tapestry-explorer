@@ -25,3 +25,8 @@ Tapisserie_de_Bayeux.png
 **/*_files
 **/*.log
 **/*.tsbuildinfo
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+**/.dev.vars*

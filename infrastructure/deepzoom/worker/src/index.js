@@ -6,16 +6,20 @@ const PUBLIC_HEADERS = Object.freeze({
 
 const IMMUTABLE_CACHE_CONTROL =
   "public, max-age=31536000, s-maxage=31536000, immutable";
-const ASSET = "[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?";
-const INTEGER = "(?:0|[1-9][0-9]*)";
-const DESCRIPTOR_PATH = new RegExp(`^/v1/(${ASSET})/(${ASSET})\\.dzi$`);
-const TILE_PATH = new RegExp(
-  `^/v1/(${ASSET})/(${ASSET})_files/(${INTEGER})/(${INTEGER})_(${INTEGER})\\.webp$`,
-);
+// This immutable version contains exactly one verified image. Reject invented
+// asset names and tile coordinates before touching either the cache or R2.
+const DESCRIPTOR_PATH = "/v1/bayeux-tapestry/bayeux-tapestry.dzi";
+const TILE_PATH = /^\/v1\/bayeux-tapestry\/bayeux-tapestry_files\/(0|[1-9][0-9]?)\/(0|[1-9][0-9]{0,2})_(0|[1-9])\.webp$/;
+const PYRAMID = Array.from({ length: 20 }, (_, level) => {
+  const scale = 2 ** (19 - level);
+  return {
+    columns: Math.ceil(Math.ceil(482096 / scale) / 1024),
+    rows: Math.ceil(Math.ceil(5550 / scale) / 1024),
+  };
+});
 
 export function parsePublicPath(pathname) {
-  const descriptor = DESCRIPTOR_PATH.exec(pathname);
-  if (descriptor && descriptor[1] === descriptor[2]) {
+  if (pathname === DESCRIPTOR_PATH) {
     return {
       kind: "descriptor",
       key: pathname.slice(1),
@@ -24,7 +28,8 @@ export function parsePublicPath(pathname) {
   }
 
   const tile = TILE_PATH.exec(pathname);
-  if (tile && tile[1] === tile[2]) {
+  const bounds = tile && PYRAMID[Number(tile[1])];
+  if (bounds && Number(tile[2]) < bounds.columns && Number(tile[3]) < bounds.rows) {
     return {
       kind: "tile",
       key: pathname.slice(1),
@@ -157,7 +162,13 @@ export async function handleRequest(
         : await env.TAPESTRY_DERIVATIVES.get(route.key);
 
     if (!object) {
-      return errorResponse(404, "not_found", "The requested public derivative was not found.", request.method);
+      const missing = errorResponse(404, "not_found", "The requested public derivative was not found.", request.method);
+      // Only a finite, valid derivative can get here. Briefly cache missing GETs
+      // so a temporary object outage cannot turn retries into repeated R2 reads.
+      // Never cache a HEAD response under the shared GET key.
+      missing.headers.set("Cache-Control", "public, max-age=30, s-maxage=30");
+      if (request.method === "GET") storeInCache(cache, cacheKey, missing, context, id);
+      return missing;
     }
 
     const headers = immutableHeaders(object, route.contentType);

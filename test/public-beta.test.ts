@@ -28,7 +28,7 @@ function fixture() {
 }
 
 function run(directory: string, script = 'validate-content', arguments_ = ['--public-beta']) {
-  return spawnSync(process.execPath, [`scripts/${script}.mjs`, ...arguments_], {
+  return spawnSync(process.execPath, [path.resolve(`scripts/${script}.mjs`), ...arguments_], {
     cwd: directory,
     encoding: 'utf8',
     env: { ...process.env, VERCEL: '1', VERCEL_ENV: 'production', VERCEL_TARGET_ENV: 'production', VITE_TAPESTRY_TILE_BASE_URL: tileBase },
@@ -102,14 +102,22 @@ describe('public-beta publication policy', () => {
     mkdirSync(path.join(directory, 'dist/server'), { recursive: true });
     mkdirSync(path.join(directory, 'dist/client'), { recursive: true });
     writeFileSync(path.join(directory, 'dist/server/vinext-prerender.json'), JSON.stringify({ routes: [{ route: '/', status: 'rendered' }] }));
-    for (const filename of ['index.html', '404.html']) writeFileSync(path.join(directory, 'dist/client', filename), '<html></html>');
     const notices = [escapeHtml(policy.notice), escapeHtml(manifest.image.rightsNotice)];
     const links = 'Museum reuse terms Corrections and takedown requests';
-    writeFileSync(path.join(directory, 'dist/client/sources.html'), `${notices.join(' ')} ${links}`);
+    const writePages = (sourceText: string) => {
+      for (const filename of ['index.html', '404.html', 'sources.html']) {
+        const body = filename === 'sources.html' ? sourceText : '';
+        writeFileSync(path.join(directory, 'dist/client', filename), `<html><head><meta charset="utf-8"></head><body>${body}</body></html>`);
+      }
+      expect(run(directory, 'secure-static-build', []).status).toBe(0);
+    };
+    writePages(`${notices.join(' ')} ${links}`);
     expect(run(directory, 'verify-build', []).status).toBe(0);
     for (const remaining of notices) {
-      writeFileSync(path.join(directory, 'dist/client/sources.html'), `${remaining} ${links}`);
+      writePages(`${remaining} ${links}`);
       expect(run(directory, 'verify-build', []).status).toBe(1);
     }
-  });
+  // Multiple real postbuild/verification processes can exceed the default five
+  // seconds on a shared runner. This is build work, not viewer runtime work.
+  }, 15000);
 });
