@@ -45,17 +45,20 @@ export function useImmersiveControls(initialImmersive = true) {
       if (event.key === 'Tab') { window.clearTimeout(timer.current); setControls((current) => ({...current, edges: { top: true, bottom: true }})); }
     };
     const leaveWindow = () => { window.clearTimeout(timer.current); hide(); };
+    // Touch emits pointerleave after pointerup even though the user has not
+    // left the page. Keep the tap-reveal timer intact for that sequence.
+    const leavePointer = (event: PointerEvent) => { if (event.pointerType !== 'touch') leaveWindow(); };
     window.addEventListener('pointermove', pointer, { passive: true });
     window.addEventListener('keydown', keyboard);
     // A hover-held playback dock must not leave the footer latched open when
     // the pointer exits the page without another move over the canvas.
-    document.documentElement.addEventListener('pointerleave', leaveWindow);
+    document.documentElement.addEventListener('pointerleave', leavePointer);
     window.addEventListener('blur', leaveWindow);
     return () => {
       window.clearTimeout(timer.current);
       window.removeEventListener('pointermove', pointer);
       window.removeEventListener('keydown', keyboard);
-      document.documentElement.removeEventListener('pointerleave', leaveWindow);
+      document.documentElement.removeEventListener('pointerleave', leavePointer);
       window.removeEventListener('blur', leaveWindow);
     };
   }, [hide, immersive]);

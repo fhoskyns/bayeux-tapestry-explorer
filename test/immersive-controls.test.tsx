@@ -50,6 +50,19 @@ describe('immersive edge controls', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it('keeps touch tap reveal open after its non-hover pointer leaves the page', () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(useImmersiveControls);
+    act(() => result.current.reveal());
+    const departure = new Event('pointerleave');
+    Object.defineProperty(departure, 'pointerType', {value: 'touch'});
+    fireEvent(document.documentElement, departure);
+    act(() => { vi.advanceTimersByTime(3999); });
+    expect(result.current.edges).toEqual({top: true, bottom: true});
+    act(() => { vi.advanceTimersByTime(1); });
+    expect(result.current.edges).toEqual({top: false, bottom: false});
+  });
+
   it('holds playback steady while hovered, then hides on canvas movement or window departure', () => {
     vi.useFakeTimers();
     const dock = document.createElement('aside');
