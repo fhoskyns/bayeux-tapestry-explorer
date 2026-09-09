@@ -25,6 +25,7 @@ import { hasSeenArrival, rememberArrival, TapestryArrival } from '@/components/t
 import type { Annotation, Scene, TapestryManifest } from '@/lib/tapestry-schema';
 import { preloadSceneImages } from '@/lib/image-preload';
 import { useImmersiveControls } from '@/lib/use-immersive-controls';
+import { createViewerUrlSync } from '@/lib/viewer-url-sync';
 import { annotationLabel } from '@/lib/annotation-label';
 import { AUTO_PAN_SPEEDS, DEFAULT_AUTO_PAN_NOTCH } from '@/lib/auto-pan';
 
@@ -246,6 +247,13 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
   // Inactive camera updates must not reset a tap-reveal timer.
   useEffect(() => { setImmersive(activeImmersive); }, [activeImmersive, setImmersive]);
   const initializedRef = useRef(false);
+  const [urlRestored, setUrlRestored] = useState(false);
+  const urlSyncRef = useRef<ReturnType<typeof createViewerUrlSync> | null>(null);
+  useEffect(() => {
+    const sync = createViewerUrlSync();
+    urlSyncRef.current = sync;
+    return () => { sync.cancel(); urlSyncRef.current = null; };
+  }, []);
   const annotationTriggerRef = useRef<HTMLElement | null>(null);
   const annotationPanelRef = useRef<HTMLDialogElement | null>(null);
   const readingTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -359,8 +367,8 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
       initializedRef.current = true;
     };
 
-    if (!initializedRef.current) restoreFromUrl(true);
-    const restoreHistory = () => { setArrivalActive(false); restoreFromUrl(); };
+    if (!initializedRef.current) { restoreFromUrl(true); setUrlRestored(true); }
+    const restoreHistory = () => { urlSyncRef.current?.cancel(); setArrivalActive(false); restoreFromUrl(); };
     window.addEventListener('popstate', restoreHistory);
     return () => window.removeEventListener('popstate', restoreHistory);
   }, [goOverview, openScene, scenes]);
@@ -378,7 +386,7 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
   }, [arrivalActive, completeArrival, reduceMotion]);
 
   useEffect(() => {
-    if (!initializedRef.current) return;
+    if (!urlRestored) return;
     const params = new URLSearchParams();
     if (sceneId) params.set('scene', sceneId);
     if (mode === 'free') {
@@ -393,8 +401,8 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
     }
     if (activeAnnotation) params.set('annotation', activeAnnotation.id);
     const query = params.toString();
-    window.history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}`);
-  }, [activeAnnotation, mode, sceneId, viewport]);
+    urlSyncRef.current?.replace(`${window.location.pathname}${query ? `?${query}` : ''}`, mode === 'free');
+  }, [activeAnnotation, mode, sceneId, viewport, urlRestored]);
 
   useEffect(() => {
     if (!initializedRef.current || mode !== 'guided' || !sceneId) return;
@@ -493,7 +501,7 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
 
   const copyLink = async () => {
     try {
-      await navigator.clipboard.writeText(window.location.href);
+      await navigator.clipboard.writeText(urlSyncRef.current?.shareUrl() ?? window.location.href);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1800);
     } catch {
