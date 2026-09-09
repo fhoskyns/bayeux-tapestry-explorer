@@ -4,6 +4,18 @@ export const TEXTILE = { width: 70, depth: 70 * 5550 / 482096, y: 0.981, pixels:
 export const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
 export type GalleryPose = { center: number; v: number; width: number; tilt: number; yaw: number };
 
+/** Portrait screens must be able to reach the same overhead detail view. */
+export function galleryMinimumWidth(aspect: number) {
+  return Math.min(0.4, TEXTILE.depth * Math.max(0.1, aspect) / 1.1);
+}
+
+/** Free orbit at case scale, smoothly flattening as the textile fills the view. */
+export function galleryOrbitWeight(worldWidth: number, aspect: number) {
+  const fill = TEXTILE.depth * aspect / worldWidth;
+  const progress = clamp((fill - 0.55) / 0.3, 0, 1);
+  return 1 - progress * progress * (3 - 2 * progress);
+}
+
 export function poseFromCamera(rect: ViewerViewport): GalleryPose {
   return { center: clamp(rect.x + rect.width / 2, 0, 1), v: rect.y + rect.height / 2,
     width: Math.max(0.15, rect.width * TEXTILE.width), tilt: 0, yaw: 0 };
@@ -11,7 +23,7 @@ export function poseFromCamera(rect: ViewerViewport): GalleryPose {
 
 /** Nearly overhead, with the case running horizontally like the chosen reference. */
 export function galleryEntryPose(from: GalleryPose): GalleryPose {
-  return { ...from, width: Math.max(3.5, from.width * 1.7), v: 0.5, tilt: 0.08, yaw: 0 };
+  return { ...from, width: clamp(from.width * 1.7, 3.5, 100), v: 0.5, tilt: 0.08, yaw: 0 };
 }
 
 export function cameraFromPose(pose: GalleryPose, aspect: number): ViewerViewport {

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PerspectiveCamera, Vector3 } from 'three';
 import { createGallery, type GalleryController } from '@/lib/gallery-runtime';
-import { TEXTILE } from '@/lib/gallery-math';
+import { galleryMinimumWidth, TEXTILE } from '@/lib/gallery-math';
 
 const graphics = vi.hoisted(() => ({render: vi.fn()}));
 vi.mock('three', async (importOriginal) => {
@@ -35,20 +35,20 @@ async function setup(width = 1280, height = 800) {
   const host = document.createElement('div');
   document.body.appendChild(host);
   Object.defineProperties(host, {clientWidth: {value: width, configurable:true}, clientHeight: {value: height, configurable:true}});
-  const onMove = vi.fn(), onManual = vi.fn(), onImmersiveChange = vi.fn();
+  const onMove = vi.fn(), onManual = vi.fn(), onImmersiveChange = vi.fn(), onError = vi.fn();
   controller = await createGallery({host, dziUrl: 'https://tiles.example/v1/bayeux.dzi',
     initialCamera: {x: .25, y: .6, width: .02, height: .8}, reduceMotion: false,
-    signal: new AbortController().signal, onMove, onManual, onImmersiveChange, onTap: vi.fn(), onError: vi.fn()});
+    signal: new AbortController().signal, onMove, onManual, onImmersiveChange, onTap: vi.fn(), onError});
   step(1200);
   const canvas = host.querySelector('canvas')!;
   canvas.setPointerCapture = vi.fn();
   canvas.hasPointerCapture = () => false;
   const camera = graphics.render.mock.calls.at(-1)![1] as PerspectiveCamera;
-  return {canvas, camera, onMove, onManual, onImmersiveChange, controller};
+  return {canvas, camera, onMove, onManual, onImmersiveChange, onError, controller};
 }
 
-function pointer(canvas: HTMLCanvasElement, type: string, id: number, x: number) {
-  const event = new MouseEvent(type, {clientX: x, clientY: 100, buttons: 1});
+function pointer(canvas: HTMLCanvasElement, type: string, id: number, x: number, y = 100, shiftKey = false) {
+  const event = new MouseEvent(type, {clientX: x, clientY: y, buttons: 1, shiftKey});
   Object.defineProperty(event, 'pointerId', {value: id});
   canvas.dispatchEvent(event);
 }
@@ -168,7 +168,7 @@ describe('gallery camera and playback gestures', () => {
     expect(onImmersiveChange).toHaveBeenLastCalledWith(false);
   });
 
-  it('stays immersive if extreme close-up orbit clips a textile edge behind the camera', async () => {
+  it('locks close-up drag overhead instead of allowing the cloth behind the camera', async () => {
     const {controller, canvas, onImmersiveChange} = await setup(1280,300);
     controller.zoom(0.4 / 3.5);
     pointer(canvas, 'pointerdown', 1, 100);
@@ -177,9 +177,99 @@ describe('gallery camera and playback gestures', () => {
     canvas.dispatchEvent(orbit);
     step(1300);
     expect(onImmersiveChange).toHaveBeenLastCalledWith(true);
-    controller.zoom(10);
+    const camera = graphics.render.mock.calls.at(-1)![1] as PerspectiveCamera;
+    expect(camera.getWorldDirection(new Vector3()).y).toBeCloseTo(-1, 10);
+    controller.zoom(20);
     step(1400);
     expect(onImmersiveChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it.each([[1280, 800], [390, 844], [320, 844], [360, 915]])('orbits freely, locks overhead close up, and restores the angle at %s × %s', async (width, height) => {
+    const {controller, canvas, camera, onMove} = await setup(width, height);
+    pointer(canvas, 'pointerdown', 1, 100);
+    pointer(canvas, 'pointermove', 1, 420, 260);
+    pointer(canvas, 'pointerup', 1, 420, 260);
+    step(1300);
+    const orbitDirection = camera.getWorldDirection(new Vector3());
+    expect(Math.abs(orbitDirection.x)).toBeGreaterThan(.2);
+    expect(Math.acos(-orbitDirection.y)).toBeGreaterThan(.6);
+    const center = onMove.mock.calls.at(-1)![0];
+    expect(center.x + center.width / 2).toBeCloseTo(.26);
+    const closeWidth = galleryMinimumWidth(width / height);
+    controller.zoom(closeWidth / 3.5);
+    step(1400);
+    expect(camera.getWorldDirection(new Vector3()).y).toBeCloseTo(-1, 10);
+    pointer(canvas, 'pointerdown', 2, 200);
+    pointer(canvas, 'pointermove', 2, 250, 120);
+    pointer(canvas, 'pointerup', 2, 250, 120);
+    step(1500);
+    expect(camera.getWorldDirection(new Vector3()).y).toBeCloseTo(-1, 10);
+    const dragged = onMove.mock.calls.at(-1)![0];
+    expect(dragged.x + dragged.width / 2).toBeLessThan(.26);
+    controller.zoom(3.5 / closeWidth);
+    step(1600);
+    expect(camera.getWorldDirection(new Vector3()).distanceTo(orbitDirection)).toBeLessThan(1e-10);
+  });
+
+  it('keeps Shift-drag available for translation at a wide angle', async () => {
+    const {canvas, camera, onMove} = await setup();
+    const direction = camera.getWorldDirection(new Vector3());
+    pointer(canvas, 'pointerdown', 1, 100);
+    pointer(canvas, 'pointermove', 1, 300, 100, true);
+    pointer(canvas, 'pointerup', 1, 300);
+    step(1300);
+    const rect = onMove.mock.calls.at(-1)![0];
+    expect(rect.x + rect.width / 2).toBeLessThan(.26);
+    expect(camera.getWorldDirection(new Vector3()).distanceTo(direction)).toBeLessThan(1e-10);
+  });
+
+  it('uses close-up arrow keys to pan without altering the remembered wide angle', async () => {
+    const {controller, canvas, camera, onMove} = await setup();
+    const direction = camera.getWorldDirection(new Vector3());
+    controller.zoom(.4 / 3.5);
+    canvas.dispatchEvent(new KeyboardEvent('keydown', {key: 'ArrowDown'}));
+    step(1300);
+    const rect = onMove.mock.calls.at(-1)![0];
+    expect(rect.y + rect.height / 2).toBeGreaterThan(.5);
+    expect(camera.getWorldDirection(new Vector3()).y).toBeCloseTo(-1, 10);
+    controller.zoom(3.5 / .4);
+    step(1400);
+    expect(camera.getWorldDirection(new Vector3()).distanceTo(direction)).toBeLessThan(1e-10);
+  });
+
+  it('keeps repeated zoom-outs bounded and ignores invalid zoom factors', async () => {
+    const {controller, camera, onMove} = await setup();
+    for (let i = 0; i < 100; i++) {
+      controller.zoom(1.25);
+      step(1300 + i * 50);
+    }
+    const finalPosition = camera.position.clone();
+    onMove.mockClear();
+    for (let i = 0; i < 300; i++) controller.zoom(1.25);
+    expect(onMove).not.toHaveBeenCalled();
+    for (const factor of [NaN, Infinity, -1, 0]) controller.zoom(factor);
+    step(6500);
+    expect(camera.position.equals(finalPosition)).toBe(true);
+    expect(camera.position.toArray().every(Number.isFinite)).toBe(true);
+  });
+
+  it('stops graphics and image work after context loss and can still return to Bird’s-eye', async () => {
+    const {controller, canvas, onError, onMove} = await setup();
+    onError.mockClear();
+    canvas.dispatchEvent(new Event('webglcontextlost', {cancelable: true}));
+    expect(onError).toHaveBeenCalledOnce();
+    expect(canvas.isConnected).toBe(false);
+    expect(frames.size).toBe(0);
+    graphics.render.mockClear();
+    onMove.mockClear();
+    controller.zoom(1.25);
+    step(1500);
+    expect(graphics.render).not.toHaveBeenCalled();
+    expect(onMove).not.toHaveBeenCalled();
+    const prepare = vi.fn(), done = vi.fn();
+    controller.exit(prepare, done);
+    expect(prepare).toHaveBeenCalledOnce();
+    expect(done).toHaveBeenCalledOnce();
   });
 
   it('keeps touch pinch playing but still pauses on a one-finger drag', async () => {

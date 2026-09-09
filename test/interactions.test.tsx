@@ -307,7 +307,7 @@ describe('guided tour interactions', () => {
     expect(screen.getByTestId('mock-viewer')).toHaveAttribute('data-auto-pan', 'false');
   });
 
-  it('clears a pinned note when continuous exploration enters another scene', () => {
+  it('clears a pinned note when continuous exploration enters another scene', async () => {
     vi.stubEnv('VITE_TAPESTRY_TILE_BASE_URL', 'https://tiles.example/v1');
     const note = tapestryManifest.scenes[0].annotations[0];
     window.history.replaceState(null, '', `/?scene=01&annotation=${note.id}`);
@@ -315,7 +315,7 @@ describe('guided tour interactions', () => {
     expect(screen.getByText(note.commentary)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Simulate a pan' }));
     expect(screen.queryByText(note.commentary)).not.toBeInTheDocument();
-    expect(new URLSearchParams(window.location.search).has('annotation')).toBe(false);
+    await waitFor(() => expect(new URLSearchParams(window.location.search).has('annotation')).toBe(false));
     expect(screen.getByTestId('mock-viewer')).toHaveAttribute('data-mode', 'free');
   });
 
@@ -454,10 +454,10 @@ describe('guided tour interactions', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Simulate a pan' }));
     expect(screen.getByRole('button', { name: /resume at scene/i })).toBeInTheDocument();
-    expect(window.location.search).toContain('mode=free');
+    await waitFor(() => expect(window.location.search).toContain('mode=free'));
   });
 
-  it.each(['flat', 'gallery'])('navigator drag preserves the raw %s camera and pauses playback', (view) => {
+  it.each(['flat', 'gallery'])('navigator drag preserves the raw %s camera and pauses playback', async (view) => {
     vi.stubEnv('VITE_TAPESTRY_TILE_BASE_URL', 'https://tiles.example/v1');
     window.history.replaceState(null, '', '/?scene=07');
     const {container} = render(<TapestryExplorer manifest={tapestryManifest} />);
@@ -482,8 +482,28 @@ describe('guided tour interactions', () => {
     fireEvent.pointerUp(track, {clientX: 360});
     fireEvent.click(track, {clientX: 360});
     expect(screen.getByTestId('mock-viewer')).toHaveAttribute('data-mode', 'free');
-    expect(window.location.search).toContain('scene=' + nearestScene(tapestryManifest.scenes, .375).id);
+    await waitFor(() => expect(window.location.search).toContain('scene=' + nearestScene(tapestryManifest.scenes, .375).id));
     expect(release).toHaveBeenCalled();
+  });
+
+  it('keeps Gallery usable when the browser rejects a camera URL update', () => {
+    vi.stubEnv('VITE_TAPESTRY_TILE_BASE_URL', 'https://tiles.example/v1');
+    window.history.replaceState(null, '', '/?scene=07');
+    const view = render(<TapestryExplorer manifest={tapestryManifest} />);
+    fireEvent.click(screen.getByRole('button', {name: 'Gallery'}));
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const replace = vi.spyOn(window.history, 'replaceState').mockImplementation(() => {
+      throw new DOMException('History quota exceeded', 'SecurityError');
+    });
+    try {
+      fireEvent.click(screen.getByRole('button', {name: 'Report gallery camera'}));
+      expect(screen.getByTestId('mock-gallery')).toBeInTheDocument();
+      expect(warning).toHaveBeenCalledOnce();
+      fireEvent.click(screen.getByRole('button', {name: 'Play auto-pan'}));
+      expect(screen.getByTestId('mock-gallery')).toHaveAttribute('data-auto-pan', 'true');
+    } finally {
+      view.unmount(); replace.mockRestore(); warning.mockRestore();
+    }
   });
 
   it('supports the accessible navigator and isolates viewer arrow keys', async () => {

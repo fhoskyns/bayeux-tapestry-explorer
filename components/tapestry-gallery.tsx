@@ -93,7 +93,7 @@ export function TapestryGallery(props: Props) {
     {error ? <output className="gallery-error"><span>{error}</span><button onClick={() => setRetry((value) => value + 1)} type="button">Retry gallery</button><button onClick={props.onClosed} type="button">Return to Bird’s-eye</button></output> : null}
     {ready && !props.closing ? <>
       <fieldset className="gallery-zoom"><legend className="sr-only">Gallery zoom</legend><button aria-label="Zoom in gallery" onClick={() => controllerRef.current?.zoom(0.8)} type="button"><Plus /></button><button aria-label="Zoom out gallery" onClick={() => controllerRef.current?.zoom(1.25)} type="button"><Minus /></button></fieldset>
-      <p className="gallery-caption">Drag along the case · scroll or pinch to zoom <span>Conceptual installation · not an official museum reconstruction</span></p>
+      <p className="gallery-caption">Drag to orbit · Shift-drag to move · zoom close to explore from above <span>Conceptual installation · not an official museum reconstruction</span></p>
     </> : null}
   </section>;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cameraFromPose, galleryEntryPose, poseFromCamera, TEXTILE, tileLayout, visibleTiles } from '@/lib/gallery-math';
+import { cameraFromPose, galleryEntryPose, galleryOrbitWeight, poseFromCamera, TEXTILE, tileLayout, visibleTiles } from '@/lib/gallery-math';
 import { nearestPreview } from '@/lib/auto-preview';
 
 describe('gallery and facsimile registration', () => {
@@ -20,6 +20,14 @@ describe('gallery and facsimile registration', () => {
     expect(galleryEntryPose(previous)).toEqual({ center: .48, v: .5, width: 3.5, tilt: .08, yaw: 0 });
     expect(previous.v).toBe(1);
     expect(galleryEntryPose({...previous, width: 5}).width).toBe(8.5);
+    expect(galleryEntryPose({...previous, width: 70}).width).toBe(100);
+  });
+  it.each([1280 / 800, 390 / 844])('blends from free orbit to overhead at aspect %s', (aspect) => {
+    const weightAtFill = (fill: number) => galleryOrbitWeight(TEXTILE.depth * aspect / fill, aspect);
+    expect(weightAtFill(.5)).toBe(1);
+    expect(weightAtFill(.7)).toBeCloseTo(.5);
+    expect(weightAtFill(.9)).toBe(0);
+    expect(weightAtFill(.699)).toBeGreaterThan(weightAtFill(.701));
   });
   it('keeps all selected tiles valid and caps the working set at 28', () => {
     for (const center of [0, .01, .5, .99, 1]) for (const width of [.4, 3.5, 70, 100]) {
