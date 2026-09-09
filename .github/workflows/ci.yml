@@ -75,8 +75,13 @@ jobs:
         uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_VERSION: '8.24.3'
           GITLEAKS_ENABLE_COMMENTS: 'false'
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: 'false'
+      # The action's PR commit API is paginated. Explicitly scan all fetched
+      # history as well, including PRs longer than its first page of commits.
+      - name: Scan all fetched history without a PR pagination limit
+        run: gitleaks detect --redact --exit-code=1 --log-opts=--all --no-banner
 
   dependency-review:
     if: github.event_name == 'pull_request'
