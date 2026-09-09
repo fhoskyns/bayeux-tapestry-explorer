@@ -117,5 +117,7 @@ describe('public-beta publication policy', () => {
       writePages(`${remaining} ${links}`);
       expect(run(directory, 'verify-build', []).status).toBe(1);
     }
-  });
+  // Multiple real postbuild/verification processes can exceed the default five
+  // seconds on a shared runner. This is build work, not viewer runtime work.
+  }, 15000);
 });
