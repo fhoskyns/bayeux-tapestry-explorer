@@ -21,7 +21,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { TapestryGallery } from '@/components/tapestry-gallery';
 import { Dialog, DialogClose, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { TapestryViewer, type ViewerViewport } from '@/components/tapestry-viewer';
-import { hasSeenArrival, rememberArrival, TapestryArrival } from '@/components/tapestry-arrival';
+import { rememberArrival, TapestryArrival } from '@/components/tapestry-arrival';
 import type { Annotation, Scene, TapestryManifest } from '@/lib/tapestry-schema';
 import { preloadSceneImages } from '@/lib/image-preload';
 import { useImmersiveControls } from '@/lib/use-immersive-controls';
@@ -213,8 +213,8 @@ export function SceneNavigator({
 }
 
 export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
-  const [mode, setMode] = useState<ViewerMode>('overview');
-  const [sceneId, setSceneId] = useState<string | null>(null);
+  const [mode, setMode] = useState<ViewerMode>('guided');
+  const [sceneId, setSceneId] = useState<string | null>(manifest.scenes[0].id);
   const [activeAnnotation, setActiveAnnotation] = useState<Annotation | null>(null);
   const [viewport, setViewport] = useState<ViewerViewport | null>(null);
   const [initialViewport, setInitialViewport] = useState<ViewerViewport | null>(null);
@@ -331,11 +331,11 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
       const requestedScene = validSceneId(params.get('scene'));
       if (!requestedScene) {
         const deliberateReplay = params.size === 1 && params.get('intro') === 'replay';
-        if (firstLoad && (deliberateReplay || (!window.location.search && !hasSeenArrival()))) {
+        if (firstLoad && (deliberateReplay || !window.location.search)) {
           openScene(scenes[0]);
           const skipMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-          setArrivalActive(!skipMotion);
-          rememberArrival();
+          setArrivalActive(deliberateReplay && !skipMotion);
+          if (deliberateReplay) rememberArrival();
           initializedRef.current = true;
           return;
         }

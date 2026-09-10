@@ -4,7 +4,7 @@ import { createMarker, type ViewerViewport } from '@/components/tapestry-viewer'
 import { selectorCenter, type Annotation, type Scene } from '@/lib/tapestry-schema';
 import { updateAutoPreview } from '@/lib/auto-preview';
 import { bindGrabCursor } from '@/lib/grab-cursor';
-import { cameraFromPose, clamp, galleryEntryPose, galleryMinimumWidth, galleryOrbitWeight, poseFromCamera, TEXTILE, tileLayout, visibleTiles, type GalleryPose } from '@/lib/gallery-math';
+import { cameraFromPose, clamp, galleryEntryPose, poseFromCamera, TEXTILE, tileLayout, visibleTiles, type GalleryPose } from '@/lib/gallery-math';
 
 type Options = {
   host: HTMLElement;
@@ -28,7 +28,7 @@ export async function createGallery(options: Options) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.setClearColor(0xf7f6f3);
-  renderer.domElement.setAttribute('aria-label', 'Interactive 3D gallery. Drag to orbit; zoom close to drag across the tapestry from above. Shift-drag moves along the case. Scroll or pinch to zoom. Arrow keys move; Shift-arrow keys orbit; plus and minus zoom.');
+  renderer.domElement.setAttribute('aria-label', 'Interactive 3D gallery. Drag to move along the case. Scroll or pinch to zoom. Shift-drag to orbit. Arrow keys move; plus and minus zoom.');
   renderer.domElement.tabIndex = 0;
   host.insertBefore(renderer.domElement, host.firstChild);
   const releaseGrabCursor = bindGrabCursor(host);
@@ -43,20 +43,6 @@ export async function createGallery(options: Options) {
   let exiting = false;
   let immersive: boolean | null = null;
   const pose = poseFromCamera(options.initialCamera);
-  // Keep the chosen wide-view angle while close-up viewing is locked overhead.
-  const orbit = { tilt: 0.08, yaw: 0 };
-  const applyOrbit = () => {
-    const weight = galleryOrbitWeight(pose.width, camera.aspect);
-    pose.tilt = orbit.tilt * weight;
-    // Fade inclination, not the azimuth: multiplying a wrapped yaw would jump
-    // as free rotation crosses ±π. At zero inclination yaw has no visual effect.
-    pose.yaw = weight === 0 ? 0 : orbit.yaw;
-  };
-  const panVertically = (fraction: number) => {
-    const visibleDepth = pose.width / camera.aspect / TEXTILE.depth;
-    const margin = Math.max(0, (1 - Math.min(1, visibleDepth)) / 2);
-    pose.v = clamp(pose.v + fraction * visibleDepth, 0.5 - margin, 0.5 + margin);
-  };
   let flatWidth = pose.width;
   let transition: Transition | null = null;
   let lastTime = 0, lastReport = 0, lastTiles = 0;
@@ -178,7 +164,7 @@ export async function createGallery(options: Options) {
   const manual = () => { moving = false; transition = null; options.onManual(); dirty = true; };
   const zoom = (factor: number) => {
     if (disposed || exiting || !Number.isFinite(factor) || factor <= 0) return;
-    const nextWidth = clamp(pose.width * factor, galleryMinimumWidth(camera.aspect), 100);
+    const nextWidth = clamp(pose.width * factor, 0.4, 100);
     // Trackpad inertia can keep firing at the limit. Do no camera, React,
     // texture or URL work when another zoom cannot change the view.
     if (nextWidth === pose.width && pose.v === 0.5) return;
@@ -188,7 +174,6 @@ export async function createGallery(options: Options) {
     const previousWidth = pose.width;
     pose.width = nextWidth;
     flatWidth = clamp(flatWidth * pose.width / previousWidth, 0.15, 70);
-    applyOrbit();
     dirty = true;
     tileRefreshPending = true;
     report();
@@ -224,13 +209,12 @@ export async function createGallery(options: Options) {
       if (before > 5 && after > 5) zoom(before / after);
     } else if (!pinchedGesture && dragDistance > 3) {
       manual();
-      if (galleryOrbitWeight(pose.width, camera.aspect) > 0 && !event.shiftKey && event.buttons !== 2) {
-        orbit.yaw = Math.atan2(Math.sin(orbit.yaw - dx * 0.006), Math.cos(orbit.yaw - dx * 0.006));
-        orbit.tilt = clamp(orbit.tilt + dy * 0.004, 0.08, 1.3);
-        applyOrbit();
+      if (event.shiftKey || event.buttons === 2) {
+        pose.yaw = clamp(pose.yaw - dx * 0.004, -0.8, 0.8);
+        pose.tilt = clamp(pose.tilt + dy * 0.004, 0.08, 1.15);
       } else {
         pose.center = clamp(pose.center - dx / width * pose.width / TEXTILE.width, 0, 1);
-        if (galleryOrbitWeight(pose.width, camera.aspect) === 0) panVertically(-dy / height);
+        pose.tilt = clamp(pose.tilt + dy * 0.003, 0.08, 1.15);
       }
     }
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
@@ -255,15 +239,8 @@ export async function createGallery(options: Options) {
     else if (event.key === '-') zoom(1.25);
     else {
       manual();
-      const canOrbit = galleryOrbitWeight(pose.width, camera.aspect) > 0;
-      if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
-        const delta = event.key === 'ArrowUp' ? -0.12 : 0.12;
-        if (canOrbit) orbit.tilt = clamp(orbit.tilt + delta, 0.08, 1.3);
-        else panVertically(delta);
-      }
-      else if (event.shiftKey && canOrbit) orbit.yaw = Math.atan2(Math.sin(orbit.yaw + (event.key === 'ArrowRight' ? 0.12 : -0.12)), Math.cos(orbit.yaw + (event.key === 'ArrowRight' ? 0.12 : -0.12)));
+      if (event.key === 'ArrowUp' || event.key === 'ArrowDown') pose.tilt = clamp(pose.tilt + (event.key === 'ArrowUp' ? -0.12 : 0.12), 0.08, 1.15);
       else pose.center = clamp(pose.center + (event.key === 'ArrowRight' ? 1 : -1) * pose.width / 70 * 0.12, 0, 1);
-      applyOrbit();
     }
     report();
   });
@@ -296,7 +273,6 @@ export async function createGallery(options: Options) {
       }
       return;
     }
-    if (!transition && !exiting) applyOrbit();
     target.set((pose.center - 0.5) * 70, TEXTILE.y, (pose.v - 0.5) * TEXTILE.depth);
     const distance = pose.width / camera.aspect / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
     const far = Math.max(400, distance + 200);
