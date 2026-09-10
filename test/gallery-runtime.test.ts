@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PerspectiveCamera, Vector3 } from 'three';
 import { createGallery, type GalleryController } from '@/lib/gallery-runtime';
-import { galleryMinimumWidth, TEXTILE } from '@/lib/gallery-math';
+import { TEXTILE } from '@/lib/gallery-math';
 
 const graphics = vi.hoisted(() => ({render: vi.fn()}));
 vi.mock('three', async (importOriginal) => {
@@ -168,7 +168,7 @@ describe('gallery camera and playback gestures', () => {
     expect(onImmersiveChange).toHaveBeenLastCalledWith(false);
   });
 
-  it('locks close-up drag overhead instead of allowing the cloth behind the camera', async () => {
+  it('stays immersive if extreme close-up orbit clips a textile edge behind the camera', async () => {
     const {controller, canvas, onImmersiveChange} = await setup(1280,300);
     controller.zoom(0.4 / 3.5);
     pointer(canvas, 'pointerdown', 1, 100);
@@ -177,64 +177,41 @@ describe('gallery camera and playback gestures', () => {
     canvas.dispatchEvent(orbit);
     step(1300);
     expect(onImmersiveChange).toHaveBeenLastCalledWith(true);
-    const camera = graphics.render.mock.calls.at(-1)![1] as PerspectiveCamera;
-    expect(camera.getWorldDirection(new Vector3()).y).toBeCloseTo(-1, 10);
-    controller.zoom(20);
+    controller.zoom(10);
     step(1400);
     expect(onImmersiveChange).toHaveBeenLastCalledWith(false);
   });
 
-  it.each([[1280, 800], [390, 844], [320, 844], [360, 915]])('orbits freely, locks overhead close up, and restores the angle at %s × %s', async (width, height) => {
+  it.each([[1280, 800], [390, 844], [320, 844]])('restores drag translation and modified orbit without zoom locking at %s × %s', async (width, height) => {
     const {controller, canvas, camera, onMove} = await setup(width, height);
     pointer(canvas, 'pointerdown', 1, 100);
-    pointer(canvas, 'pointermove', 1, 420, 260);
-    pointer(canvas, 'pointerup', 1, 420, 260);
+    pointer(canvas, 'pointermove', 1, 150, 160);
+    pointer(canvas, 'pointerup', 1, 150, 160);
     step(1300);
-    const orbitDirection = camera.getWorldDirection(new Vector3());
-    expect(Math.abs(orbitDirection.x)).toBeGreaterThan(.2);
-    expect(Math.acos(-orbitDirection.y)).toBeGreaterThan(.6);
-    const center = onMove.mock.calls.at(-1)![0];
-    expect(center.x + center.width / 2).toBeCloseTo(.26);
-    const closeWidth = galleryMinimumWidth(width / height);
-    controller.zoom(closeWidth / 3.5);
+    const moved = onMove.mock.calls.at(-1)![0];
+    const center = moved.x + moved.width / 2;
+    expect(center).toBeLessThan(.26);
+    const tilted = camera.getWorldDirection(new Vector3());
+    expect(tilted.x).toBeCloseTo(0, 10);
+    expect(Math.acos(-tilted.y)).toBeCloseTo(.08 + 60 * .003, 10);
+    pointer(canvas, 'pointerdown', 2, 100);
+    pointer(canvas, 'pointermove', 2, 150, 160, true);
+    pointer(canvas, 'pointerup', 2, 150, 160);
     step(1400);
-    expect(camera.getWorldDirection(new Vector3()).y).toBeCloseTo(-1, 10);
-    pointer(canvas, 'pointerdown', 2, 200);
-    pointer(canvas, 'pointermove', 2, 250, 120);
-    pointer(canvas, 'pointerup', 2, 250, 120);
-    step(1500);
-    expect(camera.getWorldDirection(new Vector3()).y).toBeCloseTo(-1, 10);
-    const dragged = onMove.mock.calls.at(-1)![0];
-    expect(dragged.x + dragged.width / 2).toBeLessThan(.26);
-    controller.zoom(3.5 / closeWidth);
-    step(1600);
-    expect(camera.getWorldDirection(new Vector3()).distanceTo(orbitDirection)).toBeLessThan(1e-10);
-  });
-
-  it('keeps Shift-drag available for translation at a wide angle', async () => {
-    const {canvas, camera, onMove} = await setup();
-    const direction = camera.getWorldDirection(new Vector3());
-    pointer(canvas, 'pointerdown', 1, 100);
-    pointer(canvas, 'pointermove', 1, 300, 100, true);
-    pointer(canvas, 'pointerup', 1, 300);
-    step(1300);
-    const rect = onMove.mock.calls.at(-1)![0];
-    expect(rect.x + rect.width / 2).toBeLessThan(.26);
-    expect(camera.getWorldDirection(new Vector3()).distanceTo(direction)).toBeLessThan(1e-10);
-  });
-
-  it('uses close-up arrow keys to pan without altering the remembered wide angle', async () => {
-    const {controller, canvas, camera, onMove} = await setup();
-    const direction = camera.getWorldDirection(new Vector3());
+    const rotated = camera.getWorldDirection(new Vector3());
+    expect(Math.abs(rotated.x)).toBeGreaterThan(.03);
+    const afterOrbit = onMove.mock.calls.at(-1)![0];
+    expect(afterOrbit.x + afterOrbit.width / 2).toBeCloseTo(center, 10);
     controller.zoom(.4 / 3.5);
-    canvas.dispatchEvent(new KeyboardEvent('keydown', {key: 'ArrowDown'}));
-    step(1300);
-    const rect = onMove.mock.calls.at(-1)![0];
-    expect(rect.y + rect.height / 2).toBeGreaterThan(.5);
-    expect(camera.getWorldDirection(new Vector3()).y).toBeCloseTo(-1, 10);
+    step(1500);
+    expect(camera.getWorldDirection(new Vector3()).distanceTo(rotated)).toBeLessThan(1e-10);
     controller.zoom(3.5 / .4);
-    step(1400);
-    expect(camera.getWorldDirection(new Vector3()).distanceTo(direction)).toBeLessThan(1e-10);
+    step(1600);
+    expect(camera.getWorldDirection(new Vector3()).distanceTo(rotated)).toBeLessThan(1e-10);
+    const prepare = vi.fn();
+    controller.exit(prepare, vi.fn());
+    const returned = prepare.mock.calls[0][0];
+    expect(returned.y + returned.height / 2).toBeCloseTo(.5, 10);
   });
 
   it('keeps repeated zoom-outs bounded and ignores invalid zoom factors', async () => {

@@ -260,6 +260,7 @@ describe('guided tour interactions', () => {
     try {
       const view = render(<TapestryExplorer manifest={tapestryManifest} />);
       const stage = view.container.querySelector('.explorer-stage')!;
+      fireEvent.click(screen.getByRole('button', {name:'Overview — complete tapestry'}));
       fireEvent.click(screen.getByRole('button', {name:'Gallery'}));
       act(() => { vi.advanceTimersByTime(5000); });
       expect(stage).toHaveAttribute('data-bottom-open', 'false');
@@ -319,20 +320,21 @@ describe('guided tour interactions', () => {
     expect(screen.getByTestId('mock-viewer')).toHaveAttribute('data-mode', 'free');
   });
 
-  it('plays the first-visit opening, lets visitors skip, and never replays from Home', async () => {
-    window.localStorage.removeItem(ARRIVAL_PREFERENCE);
-    render(<TapestryExplorer manifest={tapestryManifest} />);
-    expect(screen.getByRole('dialog', { name: /a satellite journey/i })).toBeInTheDocument();
-    expect(document.querySelector('main')).toHaveAttribute('inert');
-    fireEvent.click(screen.getByRole('button', { name: /skip introduction/i }));
+  it.each([false, true])('opens directly in Bird’s-eye Scene 1 for new and returning visits (seen: %s)', (seen) => {
+    if (!seen) window.localStorage.removeItem(ARRIVAL_PREFERENCE);
+    vi.stubEnv('VITE_TAPESTRY_TILE_BASE_URL', 'https://tiles.example/v1');
+    const {container} = render(<TapestryExplorer manifest={tapestryManifest} />);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(document.querySelector('main')).not.toHaveAttribute('inert');
+    expect(container.querySelector('.explorer-stage')).toHaveAttribute('data-gallery', 'false');
+    expect(screen.getByTestId('mock-viewer')).toHaveAttribute('data-mode', 'guided');
+    expect(screen.getByText('viewer scene 01')).toBeInTheDocument();
+    expect(screen.queryByTestId('mock-gallery')).not.toBeInTheDocument();
     expect(window.location.search).toBe('?scene=01');
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'King Edward and Harold' })).toHaveFocus());
     fireEvent.click(screen.getByRole('button', { name: 'Overview — complete tapestry' }));
     expect(screen.getByRole('button', { name: /start the tour/i })).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(window.localStorage.getItem(ARRIVAL_PREFERENCE)).toBe('1');
+    expect(window.localStorage.getItem(ARRIVAL_PREFERENCE)).toBe(seen ? '1' : null);
   });
 
   it('bypasses first-visit animation for reduced motion and direct scene links', () => {
@@ -376,6 +378,7 @@ describe('guided tour interactions', () => {
 
   it('enters Scene 1 from the overview and returns with Previous', async () => {
     render(<TapestryExplorer manifest={tapestryManifest} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Overview — complete tapestry' }));
     fireEvent.click(screen.getByRole('button', { name: /start the tour/i }));
     expect(await screen.findByRole('heading', { name: 'King Edward and Harold' })).toBeInTheDocument();
     expect(window.location.search).toBe('?scene=01');
@@ -436,7 +439,6 @@ describe('guided tour interactions', () => {
 
   it('can traverse all 58 scenes and exposes the final return action', async () => {
     render(<TapestryExplorer manifest={tapestryManifest} />);
-    fireEvent.click(screen.getByRole('button', { name: /start the tour/i }));
     for (let scene = 1; scene < 58; scene += 1) {
       fireEvent.click(screen.getByRole('button', { name: /next scene/i }));
     }
@@ -508,7 +510,6 @@ describe('guided tour interactions', () => {
 
   it('supports the accessible navigator and isolates viewer arrow keys', async () => {
     render(<TapestryExplorer manifest={tapestryManifest} />);
-    fireEvent.click(screen.getByRole('button', { name: /start the tour/i }));
     const viewer = await screen.findByTestId('mock-viewer');
 
     fireEvent.keyDown(viewer, { key: 'ArrowRight' });
@@ -573,7 +574,6 @@ describe('guided tour interactions', () => {
   it('pins a note, closes it with Escape, and respects reduced motion', async () => {
     mockMotion(true);
     render(<TapestryExplorer manifest={tapestryManifest} />);
-    fireEvent.click(screen.getByRole('button', { name: /start the tour/i }));
     fireEvent.click(screen.getByText('Read this scene'));
     const noteButton = await screen.findByRole('button', { name: /1a the enthroned king/i });
     fireEvent.click(noteButton);

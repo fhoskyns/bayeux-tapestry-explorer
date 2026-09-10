@@ -4,18 +4,6 @@ export const TEXTILE = { width: 70, depth: 70 * 5550 / 482096, y: 0.981, pixels:
 export const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
 export type GalleryPose = { center: number; v: number; width: number; tilt: number; yaw: number };
 
-/** Portrait screens must be able to reach the same overhead detail view. */
-export function galleryMinimumWidth(aspect: number) {
-  return Math.min(0.4, TEXTILE.depth * Math.max(0.1, aspect) / 1.1);
-}
-
-/** Free orbit at case scale, smoothly flattening as the textile fills the view. */
-export function galleryOrbitWeight(worldWidth: number, aspect: number) {
-  const fill = TEXTILE.depth * aspect / worldWidth;
-  const progress = clamp((fill - 0.55) / 0.3, 0, 1);
-  return 1 - progress * progress * (3 - 2 * progress);
-}
-
 export function poseFromCamera(rect: ViewerViewport): GalleryPose {
   return { center: clamp(rect.x + rect.width / 2, 0, 1), v: rect.y + rect.height / 2,
     width: Math.max(0.15, rect.width * TEXTILE.width), tilt: 0, yaw: 0 };
