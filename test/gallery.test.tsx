@@ -41,9 +41,10 @@ describe('lazy gallery lifecycle', () => {
     const props = propsFor();
     const view = render(<TapestryGallery {...props} />);
     await screen.findByRole('button', { name: 'Zoom in gallery' });
-    view.rerender(<TapestryGallery {...props} mode="free" cameraRequest={{x: .35, y: -.2, width: .05, height: 1.4}} />);
+    view.rerender(<TapestryGallery {...props} mode="free" scene={tapestryManifest.scenes[37]} cameraRequest={{x: .35, y: -.2, width: .05, height: 1.4}} />);
     expect(runtime.controller.pan).toHaveBeenLastCalledWith(.375);
     expect(runtime.controller.jump).not.toHaveBeenCalled();
+    expect(runtime.controller.zoom).not.toHaveBeenCalled();
     expect(runtime.create).toHaveBeenCalledTimes(1);
   });
   it('forwards zoom immersion changes only while Gallery owns the controls', async () => {
