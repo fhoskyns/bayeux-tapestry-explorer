@@ -567,6 +567,47 @@ describe('real tapestry viewer', () => {
     expect(viewer.viewport.fitBounds).not.toHaveBeenCalled();
   });
 
+  it.each([
+    {x: .5, y: -.2, width: .05, height: 1.4},
+    {x: .5, y: .3, width: .01, height: .4},
+  ])('moves to a selected chapter at the existing camera size $width × $height without a guided refit', async (camera) => {
+    const props = {...viewerProps(), dziUrl: 'https://tiles.example/v1/tapestry.dzi'};
+    const view = render(<TapestryViewer {...props} />);
+    const viewer = await initializedViewer();
+    act(() => { viewer.emit('open'); viewer.emit('update-viewport'); });
+    viewer.viewport.fitBounds.mockClear();
+    view.rerender(<TapestryViewer {...props} mode="free" scene={tapestryManifest.scenes[37]} cameraRequest={camera} />);
+    expect(viewer.viewport.fitBounds).toHaveBeenCalledExactlyOnceWith({
+      x: camera.x * 3840, y: camera.y * 2160, width: camera.width * 3840, height: camera.height * 2160,
+    }, true);
+    expect(viewer.open).toHaveBeenCalledOnce();
+    viewer.viewport.fitBounds.mockClear();
+    view.rerender(<TapestryViewer {...props} mode="free" scene={tapestryManifest.scenes[38]} cameraRequest={camera} />);
+    expect(viewer.viewport.fitBounds).not.toHaveBeenCalled();
+  });
+
+  it('honours the latest chapter camera selected during loading and does not replay it after a later pan/retry', async () => {
+    const props = {...viewerProps(), dziUrl: 'https://tiles.example/v1/tapestry.dzi'};
+    const view = render(<TapestryViewer {...props} mode="free" initialViewport={{x: .1, y: 0, width: .02, height: 1}} />);
+    const viewer = await initializedViewer();
+    const first = {x: .4, y: -.2, width: .05, height: 1.4};
+    const latest = {...first, x: .6};
+    view.rerender(<TapestryViewer {...props} mode="free" scene={tapestryManifest.scenes[37]} cameraRequest={first} />);
+    view.rerender(<TapestryViewer {...props} mode="free" scene={tapestryManifest.scenes[47]} cameraRequest={latest} />);
+    expect(viewer.viewport.fitBounds).not.toHaveBeenCalled();
+    act(() => { viewer.emit('open'); viewer.emit('update-viewport'); });
+    expect(viewer.viewport.fitBounds).toHaveBeenCalledExactlyOnceWith({
+      x: latest.x * 3840, y: latest.y * 2160, width: latest.width * 3840, height: latest.height * 2160,
+    }, true);
+    viewer.imageBounds = {x: 2800, y: 432, width: 384, height: 1080};
+    act(() => viewer.emit('animation-finish'));
+    act(() => viewer.emit('tile-load-failed', {tile: failedTile, maxReached: true}));
+    viewer.viewport.fitBounds.mockClear();
+    fireEvent.click(screen.getByRole('button', {name: /retry image/i}));
+    act(() => { viewer.emit('open'); viewer.emit('update-viewport'); });
+    expect(viewer.viewport.fitBounds).toHaveBeenCalledExactlyOnceWith(viewer.imageBounds, true);
+  });
+
   it('preserves the current free viewport on retry instead of replaying the original shared link', async () => {
     const props = { ...viewerProps(), dziUrl: 'https://tiles.example/v1/tapestry.dzi' };
     const initialViewport = {x:0.1,y:0,width:0.02,height:1};

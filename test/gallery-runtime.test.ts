@@ -214,6 +214,29 @@ describe('gallery camera and playback gestures', () => {
     expect(returned.y + returned.height / 2).toBeCloseTo(.5, 10);
   });
 
+  it('moves between chapter centres without changing the chosen gallery zoom or orbit', async () => {
+    const {controller, canvas, camera, onMove} = await setup();
+    pointer(canvas, 'pointerdown', 1, 100);
+    pointer(canvas, 'pointermove', 1, 150, 160, true);
+    pointer(canvas, 'pointerup', 1, 150, 160);
+    controller.zoom(.6);
+    step(1300);
+    const direction = camera.getWorldDirection(new Vector3());
+    const position = camera.position.clone();
+    const before = onMove.mock.calls.at(-1)![0];
+    for (const center of [.6, .01, .99]) {
+      controller.pan(center);
+      step(1400);
+      expect(camera.getWorldDirection(new Vector3()).distanceTo(direction)).toBeLessThan(1e-10);
+      expect(camera.position.y).toBeCloseTo(position.y, 10);
+      expect(camera.position.z).toBeCloseTo(position.z, 10);
+      const after = onMove.mock.calls.at(-1)![0];
+      expect(after.x + after.width / 2).toBeCloseTo(center, 10);
+      expect(after.width).toBeCloseTo(before.width, 10);
+      expect(after.height).toBeCloseTo(before.height, 10);
+    }
+  });
+
   it('keeps repeated zoom-outs bounded and ignores invalid zoom factors', async () => {
     const {controller, camera, onMove} = await setup();
     for (let i = 0; i < 100; i++) {

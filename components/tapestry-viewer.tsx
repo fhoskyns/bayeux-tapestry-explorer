@@ -50,6 +50,7 @@ type ViewerContext = Pick<
   | 'activeAnnotationId'
   | 'dziUrl'
   | 'initialViewport'
+  | 'cameraRequest'
   | 'mode'
   | 'onAnnotationActivate'
   | 'onExplore'
@@ -232,6 +233,7 @@ export function TapestryViewer({
   const sourceKeyRef = useRef('');
   const openRequestRef = useRef(0);
   const restoredViewportRef = useRef<ViewerViewport | null>(null);
+  const appliedCameraRequestRef = useRef<ViewerViewport | null>(null);
   const liveViewportRef = useRef<ViewerViewport | null>(null);
   const exploringRef = useRef(false);
   const userZoomRef = useRef(false);
@@ -249,6 +251,7 @@ export function TapestryViewer({
     activeAnnotationId,
     dziUrl,
     initialViewport,
+    cameraRequest,
     mode,
     onAnnotationActivate,
     onExplore,
@@ -272,6 +275,7 @@ export function TapestryViewer({
       activeAnnotationId,
       dziUrl,
       initialViewport,
+      cameraRequest,
       mode,
       onAnnotationActivate,
       onExplore,
@@ -289,6 +293,7 @@ export function TapestryViewer({
     activeAnnotationId,
     dziUrl,
     initialViewport,
+    cameraRequest,
     mode,
     onAnnotationActivate,
     onExplore,
@@ -301,6 +306,28 @@ export function TapestryViewer({
     reduceMotion,
     scene,
   ]);
+
+  const applyCameraRequest = useCallback((request: ViewerViewport) => {
+    const viewer = viewerRef.current;
+    const item = viewer?.world.getItemAt(0);
+    if (!viewer?.viewport || !item || !contextRef.current.dziUrl) return;
+    const dimensions = item.getContentSize();
+    exploringRef.current = true;
+    relaxingRef.current = false;
+    contextAnchorRef.current = request.height > 1 / 0.84
+      ? clamp((0.5 - request.y) / request.height, 0.1, 0.9) : null;
+    viewer.viewport.fitBounds(item.imageToViewportRectangle(
+      request.x * dimensions.x, request.y * dimensions.y,
+      request.width * dimensions.x, request.height * dimensions.y,
+    ), true);
+    appliedCameraRequestRef.current = request;
+    // Immediate seeks may not animate, so report the navigator/shared URL here.
+    const viewport = viewportForViewer(viewer, contextRef.current);
+    if (viewport) {
+      liveViewportRef.current = viewport;
+      contextRef.current.onViewportChange(viewport);
+    }
+  }, []);
 
   useEffect(() => {
     if (!elementRef.current) return;
@@ -672,7 +699,12 @@ export function TapestryViewer({
       const freeViewport = requestedViewport && requestedViewport !== restoredViewportRef.current
         ? requestedViewport
         : liveViewportRef.current ?? requestedViewport;
-      if (currentContext.mode === 'free' && freeViewport) {
+      const pendingCamera = currentContext.cameraRequest;
+      if (currentContext.mode === 'free' && pendingCamera && pendingCamera !== appliedCameraRequestRef.current) {
+        // A chapter can be selected while the descriptor is still opening.
+        // Consume the latest request, not an earlier shared/restored viewport.
+        applyCameraRequest(pendingCamera);
+      } else if (currentContext.mode === 'free' && freeViewport) {
         restoreViewport(freeViewport);
         if (freeViewport === requestedViewport) restoredViewportRef.current = requestedViewport;
       } else {
@@ -725,33 +757,16 @@ export function TapestryViewer({
             url: mode === 'overview' || !scene ? OVERVIEW_IMAGE : scene.imageUrl,
           },
     });
-  }, [dziUrl, initialViewport, mode, retryToken, scene, viewerGeneration]);
+  }, [applyCameraRequest, dziUrl, initialViewport, mode, retryToken, scene, viewerGeneration]);
 
   useEffect(() => {
     renderOverlaysRef.current();
   }, [activeAnnotationId]);
 
   useEffect(() => {
-    const viewer = viewerRef.current;
-    const item = viewer?.world.getItemAt(0);
-    if (!cameraRequest || !viewer?.viewport || !item || !dziUrl) return;
-    const dimensions = item.getContentSize();
-    exploringRef.current = true;
-    relaxingRef.current = false;
-    contextAnchorRef.current = cameraRequest.height > 1 / 0.84
-      ? clamp((0.5 - cameraRequest.y) / cameraRequest.height, 0.1, 0.9) : null;
-    viewer.viewport.fitBounds(item.imageToViewportRectangle(
-      cameraRequest.x * dimensions.x, cameraRequest.y * dimensions.y,
-      cameraRequest.width * dimensions.x, cameraRequest.height * dimensions.y,
-    ), true);
-    // An immediate navigator seek may not start an OSD animation. Report here
-    // as well as at animation-finish so the navigator and shared URL follow it.
-    const viewport = viewportForViewer(viewer, contextRef.current);
-    if (viewport) {
-      liveViewportRef.current = viewport;
-      contextRef.current.onViewportChange(viewport);
-    }
-  }, [cameraRequest, dziUrl, viewerGeneration]);
+    if (!cameraRequest) { appliedCameraRequestRef.current = null; return; }
+    applyCameraRequest(cameraRequest);
+  }, [applyCameraRequest, cameraRequest, dziUrl, viewerGeneration]);
 
   useEffect(() => {
     const viewer = viewerRef.current;

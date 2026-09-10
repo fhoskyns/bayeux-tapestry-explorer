@@ -289,6 +289,33 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
     setCameraRequest(null);
   }, []);
 
+  const selectScene = (nextScene: Scene) => {
+    if (galleryClosing) return;
+    const camera = liveCameraRef.current;
+    // Enter the tour normally from Overview or before a usable camera exists.
+    if (!dziUrl || mode === 'overview' || !camera) {
+      openScene(nextScene);
+      return;
+    }
+    const center = (nextScene.pixelBounds.x + nextScene.pixelBounds.width / 2) / MASTER_WIDTH;
+    const context = gallery || camera.height > 1 / 0.84 || camera.framing === 'context';
+    const width = Math.min(camera.width, 1);
+    const x = context
+      ? center - camera.width / 2
+      : Math.max(0, Math.min(1 - width, center - camera.width / 2));
+    // Keep the actual camera, including white margins and vertical detail.
+    // Free mode prevents the guided-tour effect from fitting the new scene.
+    const next = { ...camera, x };
+    liveCameraRef.current = next;
+    setAutoPan(false);
+    setSceneId(nextScene.id);
+    setMode('free');
+    setActiveAnnotation(null);
+    setInitialViewport(null);
+    setReadingOpen(false);
+    setCameraRequest(next);
+  };
+
   const goOverview = useCallback(() => {
     setGallery(false);
     setGalleryClosing(false);
@@ -694,7 +721,7 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
               onOpenChange={setScenePickerOpen}
               onValueChange={(value) => {
                 if (value === 'overview') goOverview();
-                else if (value) openScene(scenes[Number(value) - 1]);
+                else if (value) selectScene(scenes[Number(value) - 1]);
               }}
               value={scene ? String(scene.number) : 'overview'}
             >
