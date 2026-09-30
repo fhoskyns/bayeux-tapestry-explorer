@@ -5,15 +5,27 @@ import { composeDziUrl, nearestScene, TapestryExplorer } from '@/components/tape
 import { tapestryManifest } from '@/data/tapestry-manifest';
 import SourcesPage from '@/app/sources/page';
 import { ARRIVAL_DURATION, ARRIVAL_PREFERENCE, TapestryArrival } from '@/components/tapestry-arrival';
-import type { ComponentProps } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import type { TapestryGallery } from '@/components/tapestry-gallery';
+
+// Exercise application selection handlers without the popup's layout/scroll
+// measurements, which require real element dimensions unavailable in jsdom.
+vi.mock('@/components/ui/select', () => ({
+  Select: ({children, value, onValueChange}: {children: ReactNode; value: string; onValueChange: (value: string) => void}) => (
+    <select aria-label="Jump to a scene" value={value} onChange={(event) => onValueChange(event.target.value)}>{children}</select>
+  ),
+  SelectTrigger: () => null,
+  SelectValue: () => null,
+  SelectContent: ({children}: {children: ReactNode}) => <>{children}</>,
+  SelectItem: ({children, value}: {children: ReactNode; value: string}) => <option value={value}>{children}</option>,
+}));
 
 vi.mock('@/components/tapestry-gallery', () => ({
   TapestryGallery: ({ autoPan, speed, closing, onClosed, onPrepareFlat, onMove, cameraRequest, onImmersiveChange, onTap }: ComponentProps<typeof TapestryGallery>) => (
     <div data-testid="mock-gallery" data-auto-pan={String(autoPan)} data-auto-pan-speed={speed} data-camera-request={JSON.stringify(cameraRequest)}>
       <button type="button" onClick={() => onMove({x: .25, y: -.2, width: .05, height: 1.4})}>Report gallery camera</button>
-      <button type="button" onClick={() => onImmersiveChange(true)}>Gallery close-up</button>
-      <button type="button" onClick={() => onImmersiveChange(false)}>Gallery wide view</button>
+      <button type="button" onClick={() => onImmersiveChange?.(true)}>Gallery close-up</button>
+      <button type="button" onClick={() => onImmersiveChange?.(false)}>Gallery wide view</button>
       <button type="button" onClick={onTap}>Tap gallery canvas</button>
       {closing ? <button type="button" onClick={() => {
         onPrepareFlat({ x: .2, y: 0, width: .02, height: 1 });
@@ -55,6 +67,7 @@ vi.mock('@/components/tapestry-viewer', () => ({
     >
       <span>{scene ? `viewer scene ${scene.id}` : 'viewer overview'}</span>
       <button type="button" onClick={() => onCameraChange?.({x: .25, y: -.2, width: .05, height: 1.4})}>Report flat camera</button>
+      <button type="button" onClick={() => onCameraChange?.({x: .25, y: .3, width: .01, height: .4})}>Report flat detail camera</button>
       <button type="button" onClick={() => onImmersiveChange?.(true)}>Flat close-up</button>
       <button type="button" onClick={() => onImmersiveChange?.(false)}>Flat wide view</button>
       <button onClick={() => onExplore(0.52)} type="button">Simulate a pan</button>
@@ -214,13 +227,16 @@ describe('guided tour interactions', () => {
     expect(screen.getByRole('button', { name: 'Pause auto-pan' })).toBeInTheDocument();
   });
 
-  it('hides Gallery chrome at close zoom, retaining tap/edge reveal and uninterrupted playback', () => {
+  it('hides Gallery chrome at every zoom, retaining tap/edge reveal and uninterrupted playback', () => {
     vi.stubEnv('VITE_TAPESTRY_TILE_BASE_URL', 'https://tiles.example/v1');
     window.history.replaceState(null, '', '/?scene=07');
     const view = render(<TapestryExplorer manifest={tapestryManifest} />);
     const stage = view.container.querySelector('.explorer-stage')!;
     fireEvent.click(screen.getByRole('button', {name:'Play auto-pan'}));
     fireEvent.click(screen.getByRole('button', {name:'Gallery'}));
+    // No close-up threshold is required, including the initial wide view.
+    expect(stage).toHaveAttribute('data-top-open', 'false');
+    expect(stage).toHaveAttribute('data-bottom-open', 'false');
     fireEvent.click(screen.getByRole('button', {name:'Gallery close-up'}));
     expect(stage).toHaveAttribute('data-top-open', 'false');
     expect(stage).toHaveAttribute('data-bottom-open', 'false');
@@ -238,9 +254,38 @@ describe('guided tour interactions', () => {
       expect(stage).toHaveAttribute('data-bottom-open', 'false');
       expect(stage).toHaveAttribute('data-top-open', 'false');
       fireEvent.click(screen.getByRole('button', {name:'Gallery wide view'}));
+      expect(stage).toHaveAttribute('data-top-open', 'false');
+      expect(stage).toHaveAttribute('data-bottom-open', 'false');
+      // Tapping still gives a temporary reveal at wide zoom, not a sticky footer.
+      fireEvent.click(screen.getByRole('button', {name:'Tap gallery canvas'}));
       expect(stage).toHaveAttribute('data-top-open', 'true');
       expect(stage).toHaveAttribute('data-bottom-open', 'true');
+      act(() => { vi.advanceTimersByTime(4100); });
+      expect(stage).toHaveAttribute('data-top-open', 'false');
+      expect(stage).toHaveAttribute('data-bottom-open', 'false');
       expect(screen.getByRole('button', {name:'Pause auto-pan'})).toBeInTheDocument();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('hides Gallery entered from Overview, but keeps wide Bird’s-eye and Overview controls visible', () => {
+    vi.useFakeTimers();
+    vi.stubEnv('VITE_TAPESTRY_TILE_BASE_URL', 'https://tiles.example/v1');
+    try {
+      const view = render(<TapestryExplorer manifest={tapestryManifest} />);
+      const stage = view.container.querySelector('.explorer-stage')!;
+      fireEvent.click(screen.getByRole('button', {name:'Overview — complete tapestry'}));
+      fireEvent.click(screen.getByRole('button', {name:'Gallery'}));
+      act(() => { vi.advanceTimersByTime(5000); });
+      expect(stage).toHaveAttribute('data-bottom-open', 'false');
+      fireEvent.click(screen.getByRole('button', {name:'Bird’s-eye'}));
+      fireEvent.click(screen.getByRole('button', {name:'Complete gallery handoff'}));
+      act(() => { vi.advanceTimersByTime(10000); });
+      expect(stage).toHaveAttribute('data-top-open', 'true');
+      expect(stage).toHaveAttribute('data-bottom-open', 'true');
+      fireEvent.click(screen.getByRole('button', {name:'Overview — complete tapestry'}));
+      act(() => { vi.advanceTimersByTime(10000); });
+      expect(stage).toHaveAttribute('data-top-open', 'true');
+      expect(stage).toHaveAttribute('data-bottom-open', 'true');
     } finally { vi.useRealTimers(); }
   });
 
@@ -251,11 +296,11 @@ describe('guided tour interactions', () => {
     const stage = view.container.querySelector('.explorer-stage')!;
     fireEvent.click(screen.getByRole('button', {name:flatClose ? 'Flat close-up' : 'Flat wide view'}));
     fireEvent.click(screen.getByRole('button', {name:'Gallery'}));
-    // The Gallery entry starts wide, even if the previous flat view was close.
-    expect(stage).toHaveAttribute('data-top-open', 'true');
+    // Gallery hides at both zoom levels, independently of the flat camera.
+    expect(stage).toHaveAttribute('data-top-open', 'false');
     fireEvent.click(screen.getByRole('button', {name:flatClose ? 'Gallery wide view' : 'Gallery close-up'}));
     fireEvent.click(screen.getByRole('button', {name:flatClose ? 'Flat close-up' : 'Flat wide view'}));
-    expect(stage).toHaveAttribute('data-top-open', String(flatClose));
+    expect(stage).toHaveAttribute('data-top-open', 'false');
     fireEvent.click(screen.getByRole('button', {name:'Bird’s-eye'}));
     fireEvent.click(screen.getByRole('button', {name:'Complete gallery handoff'}));
     expect(stage).toHaveAttribute('data-top-open', String(!flatClose));
@@ -276,7 +321,7 @@ describe('guided tour interactions', () => {
     expect(screen.getByTestId('mock-viewer')).toHaveAttribute('data-auto-pan', 'false');
   });
 
-  it('clears a pinned note when continuous exploration enters another scene', () => {
+  it('clears a pinned note when continuous exploration enters another scene', async () => {
     vi.stubEnv('VITE_TAPESTRY_TILE_BASE_URL', 'https://tiles.example/v1');
     const note = tapestryManifest.scenes[0].annotations[0];
     window.history.replaceState(null, '', `/?scene=01&annotation=${note.id}`);
@@ -284,24 +329,25 @@ describe('guided tour interactions', () => {
     expect(screen.getByText(note.commentary)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Simulate a pan' }));
     expect(screen.queryByText(note.commentary)).not.toBeInTheDocument();
-    expect(new URLSearchParams(window.location.search).has('annotation')).toBe(false);
+    await waitFor(() => expect(new URLSearchParams(window.location.search).has('annotation')).toBe(false));
     expect(screen.getByTestId('mock-viewer')).toHaveAttribute('data-mode', 'free');
   });
 
-  it('plays the first-visit opening, lets visitors skip, and never replays from Home', async () => {
-    window.localStorage.removeItem(ARRIVAL_PREFERENCE);
-    render(<TapestryExplorer manifest={tapestryManifest} />);
-    expect(screen.getByRole('dialog', { name: /a satellite journey/i })).toBeInTheDocument();
-    expect(document.querySelector('main')).toHaveAttribute('inert');
-    fireEvent.click(screen.getByRole('button', { name: /skip introduction/i }));
+  it.each([false, true])('opens directly in Bird’s-eye Scene 1 for new and returning visits (seen: %s)', (seen) => {
+    if (!seen) window.localStorage.removeItem(ARRIVAL_PREFERENCE);
+    vi.stubEnv('VITE_TAPESTRY_TILE_BASE_URL', 'https://tiles.example/v1');
+    const {container} = render(<TapestryExplorer manifest={tapestryManifest} />);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(document.querySelector('main')).not.toHaveAttribute('inert');
+    expect(container.querySelector('.explorer-stage')).toHaveAttribute('data-gallery', 'false');
+    expect(screen.getByTestId('mock-viewer')).toHaveAttribute('data-mode', 'guided');
+    expect(screen.getByText('viewer scene 01')).toBeInTheDocument();
+    expect(screen.queryByTestId('mock-gallery')).not.toBeInTheDocument();
     expect(window.location.search).toBe('?scene=01');
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'King Edward and Harold' })).toHaveFocus());
     fireEvent.click(screen.getByRole('button', { name: 'Overview — complete tapestry' }));
     expect(screen.getByRole('button', { name: /start the tour/i })).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(window.localStorage.getItem(ARRIVAL_PREFERENCE)).toBe('1');
+    expect(window.localStorage.getItem(ARRIVAL_PREFERENCE)).toBe(seen ? '1' : null);
   });
 
   it('bypasses first-visit animation for reduced motion and direct scene links', () => {
@@ -345,6 +391,7 @@ describe('guided tour interactions', () => {
 
   it('enters Scene 1 from the overview and returns with Previous', async () => {
     render(<TapestryExplorer manifest={tapestryManifest} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Overview — complete tapestry' }));
     fireEvent.click(screen.getByRole('button', { name: /start the tour/i }));
     expect(await screen.findByRole('heading', { name: 'King Edward and Harold' })).toBeInTheDocument();
     expect(window.location.search).toBe('?scene=01');
@@ -405,7 +452,6 @@ describe('guided tour interactions', () => {
 
   it('can traverse all 58 scenes and exposes the final return action', async () => {
     render(<TapestryExplorer manifest={tapestryManifest} />);
-    fireEvent.click(screen.getByRole('button', { name: /start the tour/i }));
     for (let scene = 1; scene < 58; scene += 1) {
       fireEvent.click(screen.getByRole('button', { name: /next scene/i }));
     }
@@ -423,10 +469,64 @@ describe('guided tour interactions', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Simulate a pan' }));
     expect(screen.getByRole('button', { name: /resume at scene/i })).toBeInTheDocument();
-    expect(window.location.search).toContain('mode=free');
+    await waitFor(() => expect(window.location.search).toContain('mode=free'));
   });
 
-  it.each(['flat', 'gallery'])('navigator drag preserves the raw %s camera and pauses playback', (view) => {
+  async function chooseChapter(id: string) {
+    fireEvent.change(screen.getByRole('combobox', {name: 'Jump to a scene'}), {target: {value: String(Number(id))}});
+    expect(screen.getByText(`viewer scene ${id}`)).toBeInTheDocument();
+  }
+
+  it.each(['flat', 'gallery'])('keeps raw %s zoom and vertical framing through repeated dropdown selections', async (view) => {
+    vi.stubEnv('VITE_TAPESTRY_TILE_BASE_URL', 'https://tiles.example/v1');
+    window.history.replaceState(null, '', '/?scene=07&mode=free&x=0.1&y=0.2&w=0.02&h=0.6');
+    render(<TapestryExplorer manifest={tapestryManifest} />);
+    if (view === 'gallery') fireEvent.click(screen.getByRole('button', {name: 'Gallery'}));
+    fireEvent.click(screen.getByRole('button', {name: `Report ${view} camera`}));
+    fireEvent.click(screen.getByRole('button', {name: 'Simulate a viewport'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Play auto-pan'}));
+    for (const id of ['38', '01', '58']) {
+      await chooseChapter(id);
+      const selected = tapestryManifest.scenes[Number(id) - 1];
+      const camera = JSON.parse(screen.getByTestId(view === 'flat' ? 'mock-viewer' : 'mock-gallery').getAttribute('data-camera-request')!);
+      expect(camera).toMatchObject({y: -.2, width: .05, height: 1.4});
+      expect(camera.x + camera.width / 2).toBeCloseTo((selected.pixelBounds.x + selected.pixelBounds.width / 2) / 482096);
+      expect(screen.getByTestId('mock-viewer')).toHaveAttribute('data-mode', 'free');
+      expect(screen.getByTestId('mock-viewer')).toHaveAttribute('data-initial-viewport', '');
+      expect(screen.getByRole('button', {name: 'Play auto-pan'})).toBeInTheDocument();
+      if (view === 'gallery') expect(screen.getByTestId('mock-viewer')).toHaveAttribute('data-camera-request', 'null');
+    }
+  });
+
+  it('keeps zoomed-in vertical detail on dropdown selection but retains guided fitting for Next', async () => {
+    vi.stubEnv('VITE_TAPESTRY_TILE_BASE_URL', 'https://tiles.example/v1');
+    render(<TapestryExplorer manifest={tapestryManifest} />);
+    fireEvent.click(screen.getByRole('button', {name: 'Report flat detail camera'}));
+    await chooseChapter('38');
+    const viewer = screen.getByTestId('mock-viewer');
+    expect(JSON.parse(viewer.getAttribute('data-camera-request')!)).toMatchObject({y: .3, width: .01, height: .4});
+    fireEvent.click(screen.getByRole('button', {name: 'Next scene'}));
+    expect(viewer).toHaveAttribute('data-mode', 'guided');
+    expect(viewer).toHaveAttribute('data-camera-request', 'null');
+    expect(screen.getByText('viewer scene 39')).toBeInTheDocument();
+  });
+
+  it('enters a chapter normally from Overview or before the camera is ready', async () => {
+    vi.stubEnv('VITE_TAPESTRY_TILE_BASE_URL', 'https://tiles.example/v1');
+    render(<TapestryExplorer manifest={tapestryManifest} />);
+    await chooseChapter('38');
+    const viewer = screen.getByTestId('mock-viewer');
+    expect(viewer).toHaveAttribute('data-mode', 'guided');
+    expect(viewer).toHaveAttribute('data-camera-request', 'null');
+    fireEvent.click(screen.getByRole('button', {name: 'Report flat camera'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Overview — complete tapestry'}));
+    await chooseChapter('07');
+    expect(viewer).toHaveAttribute('data-mode', 'guided');
+    expect(viewer).toHaveAttribute('data-camera-request', 'null');
+    expect(screen.getByText('viewer scene 07')).toBeInTheDocument();
+  });
+
+  it.each(['flat', 'gallery'])('navigator drag preserves the raw %s camera and pauses playback', async (view) => {
     vi.stubEnv('VITE_TAPESTRY_TILE_BASE_URL', 'https://tiles.example/v1');
     window.history.replaceState(null, '', '/?scene=07');
     const {container} = render(<TapestryExplorer manifest={tapestryManifest} />);
@@ -451,13 +551,32 @@ describe('guided tour interactions', () => {
     fireEvent.pointerUp(track, {clientX: 360});
     fireEvent.click(track, {clientX: 360});
     expect(screen.getByTestId('mock-viewer')).toHaveAttribute('data-mode', 'free');
-    expect(window.location.search).toContain('scene=' + nearestScene(tapestryManifest.scenes, .375).id);
+    await waitFor(() => expect(window.location.search).toContain('scene=' + nearestScene(tapestryManifest.scenes, .375).id));
     expect(release).toHaveBeenCalled();
+  });
+
+  it('keeps Gallery usable when the browser rejects a camera URL update', () => {
+    vi.stubEnv('VITE_TAPESTRY_TILE_BASE_URL', 'https://tiles.example/v1');
+    window.history.replaceState(null, '', '/?scene=07');
+    const view = render(<TapestryExplorer manifest={tapestryManifest} />);
+    fireEvent.click(screen.getByRole('button', {name: 'Gallery'}));
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const replace = vi.spyOn(window.history, 'replaceState').mockImplementation(() => {
+      throw new DOMException('History quota exceeded', 'SecurityError');
+    });
+    try {
+      fireEvent.click(screen.getByRole('button', {name: 'Report gallery camera'}));
+      expect(screen.getByTestId('mock-gallery')).toBeInTheDocument();
+      expect(warning).toHaveBeenCalledOnce();
+      fireEvent.click(screen.getByRole('button', {name: 'Play auto-pan'}));
+      expect(screen.getByTestId('mock-gallery')).toHaveAttribute('data-auto-pan', 'true');
+    } finally {
+      view.unmount(); replace.mockRestore(); warning.mockRestore();
+    }
   });
 
   it('supports the accessible navigator and isolates viewer arrow keys', async () => {
     render(<TapestryExplorer manifest={tapestryManifest} />);
-    fireEvent.click(screen.getByRole('button', { name: /start the tour/i }));
     const viewer = await screen.findByTestId('mock-viewer');
 
     fireEvent.keyDown(viewer, { key: 'ArrowRight' });
@@ -522,7 +641,6 @@ describe('guided tour interactions', () => {
   it('pins a note, closes it with Escape, and respects reduced motion', async () => {
     mockMotion(true);
     render(<TapestryExplorer manifest={tapestryManifest} />);
-    fireEvent.click(screen.getByRole('button', { name: /start the tour/i }));
     fireEvent.click(screen.getByText('Read this scene'));
     const noteButton = await screen.findByRole('button', { name: /1a the enthroned king/i });
     fireEvent.click(noteButton);

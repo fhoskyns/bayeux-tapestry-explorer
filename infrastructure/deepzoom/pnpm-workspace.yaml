@@ -5,3 +5,5 @@ allowBuilds:
 # Match the already-verified image toolchain; do not regenerate imagery.
 overrides:
   'sharp@<0.35.4': 0.35.4
+  # Miniflare pins Undici; keep its 7.x dependencies on the security patch.
+  'undici@>=7 <7.29.1': 7.29.1

@@ -10,7 +10,8 @@ The complete lossless Deep Zoom pyramid passed a fresh full verification on 7 Se
 
 ## Experience
 
-- An optional, skippable 2.6-second overhead globe-to-London descent using real NASA, Copernicus/EOX and Environment Agency imagery; no live map API. See [imagery provenance](./docs/intro-assets.md).
+- The main URL opens directly in Bird’s-eye at Chapter 1 for new and returning visitors. Shared scene links retain their destination; Home returns to the complete strip.
+- An optional, skippable 2.6-second overhead globe-to-London descent is available from “Replay opening” on Sources & Rights, using real NASA, Copernicus/EOX and Environment Agency imagery; no live map API. See [imagery provenance](./docs/intro-assets.md).
 - A pure-white, full-viewport viewer. Title and controls reveal at the top/bottom edges, by keyboard, or on a canvas tap; they never shrink the image.
 - A true-proportion overview of the complete surviving strip.
 - A 58-scene guided tour with previous/next controls and shareable URLs.

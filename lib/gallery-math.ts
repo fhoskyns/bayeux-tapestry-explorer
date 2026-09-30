@@ -11,7 +11,7 @@ export function poseFromCamera(rect: ViewerViewport): GalleryPose {
 
 /** Nearly overhead, with the case running horizontally like the chosen reference. */
 export function galleryEntryPose(from: GalleryPose): GalleryPose {
-  return { ...from, width: Math.max(3.5, from.width * 1.7), v: 0.5, tilt: 0.08, yaw: 0 };
+  return { ...from, width: clamp(from.width * 1.7, 3.5, 100), v: 0.5, tilt: 0.08, yaw: 0 };
 }
 
 export function cameraFromPose(pose: GalleryPose, aspect: number): ViewerViewport {

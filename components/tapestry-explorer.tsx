@@ -21,10 +21,11 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { TapestryGallery } from '@/components/tapestry-gallery';
 import { Dialog, DialogClose, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { TapestryViewer, type ViewerViewport } from '@/components/tapestry-viewer';
-import { hasSeenArrival, rememberArrival, TapestryArrival } from '@/components/tapestry-arrival';
+import { rememberArrival, TapestryArrival } from '@/components/tapestry-arrival';
 import type { Annotation, Scene, TapestryManifest } from '@/lib/tapestry-schema';
 import { preloadSceneImages } from '@/lib/image-preload';
 import { useImmersiveControls } from '@/lib/use-immersive-controls';
+import { createViewerUrlSync } from '@/lib/viewer-url-sync';
 import { annotationLabel } from '@/lib/annotation-label';
 import { AUTO_PAN_SPEEDS, DEFAULT_AUTO_PAN_NOTCH } from '@/lib/auto-pan';
 
@@ -212,8 +213,8 @@ export function SceneNavigator({
 }
 
 export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
-  const [mode, setMode] = useState<ViewerMode>('overview');
-  const [sceneId, setSceneId] = useState<string | null>(null);
+  const [mode, setMode] = useState<ViewerMode>('guided');
+  const [sceneId, setSceneId] = useState<string | null>(manifest.scenes[0].id);
   const [activeAnnotation, setActiveAnnotation] = useState<Annotation | null>(null);
   const [viewport, setViewport] = useState<ViewerViewport | null>(null);
   const [initialViewport, setInitialViewport] = useState<ViewerViewport | null>(null);
@@ -240,13 +241,19 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
   const pauseAutoPan = useCallback(() => setAutoPan(false), []);
   const { immersive, edges, reveal, setImmersive } = useImmersiveControls(false);
   const [flatImmersive, setFlatImmersive] = useState(false);
-  const [galleryImmersive, setGalleryImmersive] = useState(false);
-  const activeImmersive = (gallery || mode !== 'overview') &&
-    (gallery && !galleryClosing ? galleryImmersive : flatImmersive);
-  // Each renderer keeps its own last zoom state; only the visible owner drives
-  // edge controls. Inactive camera updates must not reset a tap-reveal timer.
+  // Gallery always auto-hides its edges. Bird's-eye retains its zoom-based
+  // context view, including when we return from the Gallery camera handoff.
+  const activeImmersive = (gallery && !galleryClosing) || (mode !== 'overview' && flatImmersive);
+  // Inactive camera updates must not reset a tap-reveal timer.
   useEffect(() => { setImmersive(activeImmersive); }, [activeImmersive, setImmersive]);
   const initializedRef = useRef(false);
+  const [urlRestored, setUrlRestored] = useState(false);
+  const urlSyncRef = useRef<ReturnType<typeof createViewerUrlSync> | null>(null);
+  useEffect(() => {
+    const sync = createViewerUrlSync();
+    urlSyncRef.current = sync;
+    return () => { sync.cancel(); urlSyncRef.current = null; };
+  }, []);
   const annotationTriggerRef = useRef<HTMLElement | null>(null);
   const annotationPanelRef = useRef<HTMLDialogElement | null>(null);
   const readingTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -281,6 +288,33 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
     setReadingOpen(false);
     setCameraRequest(null);
   }, []);
+
+  const selectScene = (nextScene: Scene) => {
+    if (galleryClosing) return;
+    const camera = liveCameraRef.current;
+    // Enter the tour normally from Overview or before a usable camera exists.
+    if (!dziUrl || mode === 'overview' || !camera) {
+      openScene(nextScene);
+      return;
+    }
+    const center = (nextScene.pixelBounds.x + nextScene.pixelBounds.width / 2) / MASTER_WIDTH;
+    const context = gallery || camera.height > 1 / 0.84 || camera.framing === 'context';
+    const width = Math.min(camera.width, 1);
+    const x = context
+      ? center - camera.width / 2
+      : Math.max(0, Math.min(1 - width, center - camera.width / 2));
+    // Keep the actual camera, including white margins and vertical detail.
+    // Free mode prevents the guided-tour effect from fitting the new scene.
+    const next = { ...camera, x };
+    liveCameraRef.current = next;
+    setAutoPan(false);
+    setSceneId(nextScene.id);
+    setMode('free');
+    setActiveAnnotation(null);
+    setInitialViewport(null);
+    setReadingOpen(false);
+    setCameraRequest(next);
+  };
 
   const goOverview = useCallback(() => {
     setGallery(false);
@@ -324,11 +358,11 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
       const requestedScene = validSceneId(params.get('scene'));
       if (!requestedScene) {
         const deliberateReplay = params.size === 1 && params.get('intro') === 'replay';
-        if (firstLoad && (deliberateReplay || (!window.location.search && !hasSeenArrival()))) {
+        if (firstLoad && (deliberateReplay || !window.location.search)) {
           openScene(scenes[0]);
           const skipMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-          setArrivalActive(!skipMotion);
-          rememberArrival();
+          setArrivalActive(deliberateReplay && !skipMotion);
+          if (deliberateReplay) rememberArrival();
           initializedRef.current = true;
           return;
         }
@@ -360,8 +394,8 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
       initializedRef.current = true;
     };
 
-    if (!initializedRef.current) restoreFromUrl(true);
-    const restoreHistory = () => { setArrivalActive(false); restoreFromUrl(); };
+    if (!initializedRef.current) { restoreFromUrl(true); setUrlRestored(true); }
+    const restoreHistory = () => { urlSyncRef.current?.cancel(); setArrivalActive(false); restoreFromUrl(); };
     window.addEventListener('popstate', restoreHistory);
     return () => window.removeEventListener('popstate', restoreHistory);
   }, [goOverview, openScene, scenes]);
@@ -379,7 +413,7 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
   }, [arrivalActive, completeArrival, reduceMotion]);
 
   useEffect(() => {
-    if (!initializedRef.current) return;
+    if (!urlRestored) return;
     const params = new URLSearchParams();
     if (sceneId) params.set('scene', sceneId);
     if (mode === 'free') {
@@ -394,8 +428,8 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
     }
     if (activeAnnotation) params.set('annotation', activeAnnotation.id);
     const query = params.toString();
-    window.history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}`);
-  }, [activeAnnotation, mode, sceneId, viewport]);
+    urlSyncRef.current?.replace(`${window.location.pathname}${query ? `?${query}` : ''}`, mode === 'free');
+  }, [activeAnnotation, mode, sceneId, viewport, urlRestored]);
 
   useEffect(() => {
     if (!initializedRef.current || mode !== 'guided' || !sceneId) return;
@@ -494,7 +528,7 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
 
   const copyLink = async () => {
     try {
-      await navigator.clipboard.writeText(window.location.href);
+      await navigator.clipboard.writeText(urlSyncRef.current?.shareUrl() ?? window.location.href);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1800);
     } catch {
@@ -571,7 +605,6 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
     if (!value || galleryClosing) return;
     // Playback is shared user intent; only the active viewer owns its animation.
     if (value === 'gallery' && !gallery) {
-      setGalleryImmersive(false);
       setCameraRequest(null);
       setGalleryCamera(liveCameraRef.current ?? { x: 0, y: 0, width: 1, height: 1 });
       setGalleryClosing(false); setGallery(true);
@@ -627,7 +660,6 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
               cameraRequest={cameraRequest}
               autoPan={autoPan} speed={autoPanSpeed.pixelsPerSecond} reduceMotion={reduceMotion} scene={scene} mode={mode}
               activeAnnotationId={activeAnnotation?.id} onAnnotationActivate={activateAnnotation}
-              onImmersiveChange={setGalleryImmersive}
               onMove={galleryMove} onManual={pauseAutoPan} onTap={reveal} onPrepareFlat={prepareFlat} onClosed={closeGallery} /> : null}
           {activeAnnotation ? (
             <>
@@ -689,7 +721,7 @@ export function TapestryExplorer({ manifest }: { manifest: TapestryManifest }) {
               onOpenChange={setScenePickerOpen}
               onValueChange={(value) => {
                 if (value === 'overview') goOverview();
-                else if (value) openScene(scenes[Number(value) - 1]);
+                else if (value) selectScene(scenes[Number(value) - 1]);
               }}
               value={scene ? String(scene.number) : 'overview'}
             >

@@ -163,12 +163,16 @@ export async function createGallery(options: Options) {
   const report = () => options.onMove(flatCamera());
   const manual = () => { moving = false; transition = null; options.onManual(); dirty = true; };
   const zoom = (factor: number) => {
-    if (exiting) return;
+    if (disposed || exiting || !Number.isFinite(factor) || factor <= 0) return;
+    const nextWidth = clamp(pose.width * factor, 0.4, 100);
+    // Trackpad inertia can keep firing at the limit. Do no camera, React,
+    // texture or URL work when another zoom cannot change the view.
+    if (nextWidth === pose.width && pose.v === 0.5) return;
     // Zoom changes the viewing distance, not the user's playback choice.
     transition = null;
     pose.v = 0.5;
     const previousWidth = pose.width;
-    pose.width = clamp(pose.width * factor, 0.4, 100);
+    pose.width = nextWidth;
     flatWidth = clamp(flatWidth * pose.width / previousWidth, 0.15, 70);
     dirty = true;
     tileRefreshPending = true;
@@ -178,7 +182,10 @@ export async function createGallery(options: Options) {
   const canvas = renderer.domElement;
   canvas.addEventListener('webglcontextlost', (event) => {
     event.preventDefault();
-    if (!disposed) options.onError('The 3D graphics session was interrupted. Switch to Bird’s-eye or reopen Gallery.');
+    if (!disposed) {
+      dispose();
+      options.onError('The 3D graphics session was interrupted. Switch to Bird’s-eye or reopen Gallery.');
+    }
   });
   canvas.addEventListener('contextmenu', (event) => event.preventDefault());
   canvas.addEventListener('pointerdown', (event) => {
@@ -358,6 +365,7 @@ export async function createGallery(options: Options) {
       moving = false;
       const rect = flatCamera();
       prepare(rect);
+      if (disposed) { done(); return; }
       animateTo({ ...pose, width: flatWidth, tilt: 0, yaw: 0 }, 1000, done);
     },
   };

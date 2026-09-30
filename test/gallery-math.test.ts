@@ -20,6 +20,7 @@ describe('gallery and facsimile registration', () => {
     expect(galleryEntryPose(previous)).toEqual({ center: .48, v: .5, width: 3.5, tilt: .08, yaw: 0 });
     expect(previous.v).toBe(1);
     expect(galleryEntryPose({...previous, width: 5}).width).toBe(8.5);
+    expect(galleryEntryPose({...previous, width: 70}).width).toBe(100);
   });
   it('keeps all selected tiles valid and caps the working set at 28', () => {
     for (const center of [0, .01, .5, .99, 1]) for (const width of [.4, 3.5, 70, 100]) {

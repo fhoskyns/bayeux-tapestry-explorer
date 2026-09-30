@@ -49,4 +49,41 @@ describe('immersive edge controls', () => {
     expect(result.current.edges).toEqual({top:true,bottom:true});
     expect(vi.getTimerCount()).toBe(0);
   });
+
+  it('keeps touch tap reveal open after its non-hover pointer leaves the page', () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(useImmersiveControls);
+    act(() => result.current.reveal());
+    const departure = new Event('pointerleave');
+    Object.defineProperty(departure, 'pointerType', {value: 'touch'});
+    fireEvent(document.documentElement, departure);
+    act(() => { vi.advanceTimersByTime(3999); });
+    expect(result.current.edges).toEqual({top: true, bottom: true});
+    act(() => { vi.advanceTimersByTime(1); });
+    expect(result.current.edges).toEqual({top: false, bottom: false});
+  });
+
+  it('holds playback steady while hovered, then hides on canvas movement or window departure', () => {
+    vi.useFakeTimers();
+    const dock = document.createElement('aside');
+    dock.className = 'floating-playback';
+    document.body.appendChild(dock);
+    const { result } = renderHook(useImmersiveControls);
+    const hoverDock = () => fireEvent.pointerMove(dock, {clientX: window.innerWidth - 80, clientY: window.innerHeight - 200});
+    try {
+      act(() => result.current.reveal());
+      hoverDock();
+      expect(result.current.edges.bottom).toBe(true);
+      fireEvent.pointerMove(window, {clientX: 300, clientY: window.innerHeight / 2});
+      expect(result.current.edges.bottom).toBe(false);
+      act(() => result.current.reveal());
+      hoverDock();
+      fireEvent.pointerLeave(document.documentElement);
+      expect(result.current.edges).toEqual({top: false, bottom: false});
+      act(() => result.current.reveal());
+      hoverDock();
+      fireEvent.blur(window);
+      expect(result.current.edges).toEqual({top: false, bottom: false});
+    } finally { dock.remove(); }
+  });
 });

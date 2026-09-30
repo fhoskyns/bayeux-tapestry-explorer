@@ -16,9 +16,9 @@ Camera handoffs use the unclipped image rectangle, including white margins, rath
 
 Switching views preserves auto-pan's play/pause state and chosen speed. The camera handoff completes before the destination continues panning; only one viewer owns playback at a time. Pausing during loading or a transition remains authoritative and is never overridden by completion.
 
-The title and bottom controls slide away when the local textile cross-section exceeds 90% of the Gallery viewport height, and return below 84%. This hysteresis avoids flicker. The measurement uses the rendered 3D camera, including angle and screen aspect ratio, not the flat handoff camera. Edge hover, tap and keyboard reveal remain available; the view toggle, zoom buttons and playback dock stay accessible. Each view retains its own zoom state when switching.
+The title and bottom controls auto-hide at every Gallery zoom level, including its wide entry view. Edge hover, temporary tap reveal and keyboard access remain available; the view toggle, zoom buttons and playback dock stay accessible. Hover-held controls close when the pointer leaves the page. Bird’s-eye retains its separate zoom-based behaviour: controls stay visible in the zoomed-out context view and hide in close-up. Returning from Gallery restores the flat view’s own state without changing playback.
 
-Drag horizontally to move along the case; vertical drag adjusts the viewing angle. Shift-drag or right-drag orbits within bounded angles. Wheel, pinch, the visible plus/minus controls and keyboard +/− zoom towards the tapestry’s vertical centre line without changing playback state. Zoom also preserves playback in Bird’s-eye, including through its animated zoom. Keyboard arrows move along the case or adjust tilt. Deliberate dragging, navigation and reading still pause automatic playback. Cameras stay above the textile plane and cannot turn underneath it.
+Drag horizontally to move along the case; vertical drag adjusts the viewing angle. Shift-drag or right-drag orbits within bounded angles. Zoom preserves the chosen angle without automatically locking overhead. Wheel, pinch, the visible plus/minus controls and keyboard +/− zoom towards the tapestry’s vertical centre line without changing playback state. Zoom also preserves playback in Bird’s-eye, including through its animated zoom. Keyboard arrows move along the case or adjust tilt. Deliberate dragging, navigation and reading still pause automatic playback. Cameras stay above the textile plane and cannot turn underneath it.
 
 ## Resource limits and failure handling
 
@@ -28,6 +28,8 @@ Drag horizontally to move along the case; vertical drag adjusts the viewing angl
 - DZI overlap is cropped in UV coordinates. Photographic layers use unlit sRGB materials; geometry lighting does not repaint the embroidery.
 - Idle rendering stops drawing; hidden tabs suspend movement. A trailing tile refresh handles the final zoom/resize.
 - Abort pending requests and dispose textures, image bitmaps, geometry, renderer and animation frames when closing. Failed image requests do not endlessly retry; reopening/retrying Gallery retries them.
+- Graphics-context loss stops rendering and outstanding image work; retry and return to Bird’s-eye remain available.
+- Repeated zoom gestures at either limit are no-ops. Continuous camera URL writes are deduplicated and capped at one per 400 ms; browser History exceptions are contained with a 30-second backoff. Sharing uses the latest intended camera even while its address-bar update is pending. This addresses a verified History-quota failure path, not a confirmed diagnosis of an embedded-browser process crash.
 - Loading/error UI always offers a return to Bird’s-eye. No analytics, server API or extra persistence.
 
 Implementation references: [Three.js GLTFLoader](https://threejs.org/docs/pages/GLTFLoader.html), [WebGLRenderer](https://threejs.org/docs/pages/WebGLRenderer.html), [OpenSeadragon Viewport](https://openseadragon.github.io/docs/OpenSeadragon.Viewport.html).
